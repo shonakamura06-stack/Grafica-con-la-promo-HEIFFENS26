@@ -91,3 +91,17 @@ export const MONSTER_MAP: Record<string, MonsterDef> = Object.fromEntries(
 
 /** Grupo de gemelos: ambos pasajeros comparten este id de grupo. */
 export const TWIN_GROUP = 'gemelos';
+
+/** Colores caramelo por piso (banners, insignias, botones y barandillas). */
+export const FLOOR_COLORS: Record<number, number> = {
+  1: 0x5aa8e8, // azul
+  2: 0xf87171, // rojo
+  3: 0xfacc15, // amarillo
+  4: 0x4ade80, // verde
+  5: 0xfb923c, // naranja
+  6: 0xc084fc, // morado
+};
+
+export function floorColor(f: number): number {
+  return FLOOR_COLORS[f] ?? 0x9fe8d8;
+}

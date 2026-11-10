@@ -1,12 +1,12 @@
 /**
  * Selección de niveles — mapa del hotel con los 30 niveles,
- * estrellas obtenidas y niveles bloqueados.
+ * estrellas obtenidas y niveles bloqueados. Estilo kawaii pastel.
  */
 
 import Phaser from 'phaser';
 import { LEVELS, TOTAL_LEVELS } from '../data/levels';
 import { loadSave } from '../systems/save';
-import { makeButton, makeCoins, makeText, COLORS } from '../systems/ui';
+import { makeButton, makeCoins, makeText, makeWoodSign, COLORS } from '../systems/ui';
 import { audio } from '../systems/audio';
 
 export default class LevelSelectScene extends Phaser.Scene {
@@ -20,20 +20,28 @@ export default class LevelSelectScene extends Phaser.Scene {
     const H = this.scale.height;
 
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x2b1b4d, 0x2b1b4d, 0x17102e, 0x17102e, 1);
+    bg.fillGradientStyle(0xffd9c0, 0xffd9c0, 0xffeef5, 0xffeef5, 1);
     bg.fillRect(0, 0, W, H);
+    const cloudDefs: Array<[number, number, number, number]> = [
+      [70, 150, 0.7, 10000], [470, 260, 0.6, 13000], [60, 700, 0.65, 12000],
+    ];
+    cloudDefs.forEach(([x, y, s, dur]) => {
+      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.9);
+      this.tweens.add({ targets: c, x: x + 22, duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    });
 
     makeButton(this, 52, 40, 76, 48, '◀', {
-      bg: COLORS.panelLight, textColor: '#ffffff', fontSize: 24,
+      bg: COLORS.purple, fontSize: 24,
       onClick: () => this.scene.start('menu'),
     });
-    makeText(this, W / 2, 40, 'NIVELES', 32, '#ffd678');
+    makeWoodSign(this, W / 2, 40, 240, 56);
+    makeText(this, W / 2, 40, 'NIVELES', 28, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.35)', 3, true, true);
     makeCoins(this, W - 70, 40, save.coins);
 
     const totalStars = Object.values(save.stars).reduce((a, b) => a + b, 0);
-    makeText(this, W / 2, 84, `${Object.keys(save.stars).length}/${TOTAL_LEVELS} niveles · ${totalStars} estrellas`, 18, '#c9bdf0', false);
+    makeText(this, W / 2, 84, `${Object.keys(save.stars).length}/${TOTAL_LEVELS} niveles · ${totalStars} estrellas`, 18, '#a06a35', false);
 
-    // Rejilla 5 x 6
+    // Rejilla 5 x 6 con botones caramelo
     const cols = 5;
     const cellW = 96;
     const cellH = 104;
@@ -50,22 +58,25 @@ export default class LevelSelectScene extends Phaser.Scene {
 
       const g = this.add.graphics();
       const w = 76, h = 84;
-      g.fillStyle(0x000000, 0.25);
-      g.fillRoundedRect(x - w / 2, y - h / 2 + 4, w, h, 14);
-      g.fillStyle(locked ? 0x3a2d5c : stars === 3 ? 0xf59e0b : 0x5b4396, 1);
+      const bgColor = locked ? 0xd8cdb4 : stars === 3 ? 0xffa94d : stars > 0 ? 0x9fe8d8 : 0xfff3d6;
+      const dark = Phaser.Display.Color.IntegerToColor(bgColor).darken(28).color;
+      g.fillStyle(dark, 1);
+      g.fillRoundedRect(x - w / 2, y - h / 2 + 5, w, h, 14);
+      g.fillStyle(bgColor, 1);
       g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 14);
-      g.lineStyle(3, 0xffffff, locked ? 0.1 : 0.35);
+      g.fillStyle(0xffffff, 0.25);
+      g.fillRoundedRect(x - w / 2 + 3, y - h / 2 + 2, w - 6, h * 0.34, 10);
+      g.lineStyle(3, 0xffffff, 0.9);
       g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 14);
 
       if (locked) {
         this.add.image(x, y - 6, 'lock').setScale(0.8);
-        makeText(this, x, y + 24, `${lvl.id}`, 16, '#8f7fc0');
+        makeText(this, x, y + 24, `${lvl.id}`, 16, '#a06a35');
       } else {
-        makeText(this, x, y - 18, `${lvl.id}`, 28, '#ffffff');
-        // mini estrellas
+        makeText(this, x, y - 18, `${lvl.id}`, 28, '#6b4423');
         for (let s = 0; s < 3; s++) {
           const star = this.add.image(x - 22 + s * 22, y + 18, 'star').setScale(0.38);
-          if (s >= stars) star.setTint(0x6b5a8a);
+          if (s >= stars) star.setTint(0xb8a888);
         }
       }
 
@@ -81,6 +92,6 @@ export default class LevelSelectScene extends Phaser.Scene {
       });
     });
 
-    makeText(this, W / 2, H - 30, 'Toca un nivel para jugar', 16, '#8f7fc0', false);
+    makeText(this, W / 2, H - 30, 'Toca un nivel para jugar', 16, '#a06a35', false);
   }
 }

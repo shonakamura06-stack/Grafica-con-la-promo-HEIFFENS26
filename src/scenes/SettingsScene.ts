@@ -1,10 +1,11 @@
 /**
  * Ajustes — sonido, música, vibración, idioma y reinicio de progreso.
+ * Estilo kawaii pastel.
  */
 
 import Phaser from 'phaser';
 import { loadSave, writeSave, clearSave, defaultSave } from '../systems/save';
-import { makeButton, makeText, COLORS } from '../systems/ui';
+import { makeButton, makeText, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
 
 export default class SettingsScene extends Phaser.Scene {
@@ -19,14 +20,22 @@ export default class SettingsScene extends Phaser.Scene {
     const H = this.scale.height;
 
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x2b1b4d, 0x2b1b4d, 0x17102e, 0x17102e, 1);
+    bg.fillGradientStyle(0xffd9c0, 0xffd9c0, 0xffeef5, 0xffeef5, 1);
     bg.fillRect(0, 0, W, H);
+    const cloudDefs: Array<[number, number, number, number]> = [
+      [70, 140, 0.7, 11000], [470, 240, 0.6, 13000],
+    ];
+    cloudDefs.forEach(([x, y, s, dur]) => {
+      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.9);
+      this.tweens.add({ targets: c, x: x + 22, duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    });
 
     makeButton(this, 52, 40, 76, 48, '◀', {
-      bg: COLORS.panelLight, textColor: '#ffffff', fontSize: 24,
+      bg: COLORS.purple, fontSize: 24,
       onClick: () => this.scene.start('menu'),
     });
-    makeText(this, W / 2, 40, 'AJUSTES', 32, '#ffd678');
+    makeWoodSign(this, W / 2, 40, 280, 56);
+    makeText(this, W / 2, 40, 'AJUSTES', 28, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.35)', 3, true, true);
 
     const save = loadSave();
     const rows: Array<{ label: string; key: 'sound' | 'music' | 'vibration' }> = [
@@ -37,11 +46,10 @@ export default class SettingsScene extends Phaser.Scene {
 
     rows.forEach((row, i) => {
       const y = 150 + i * 90;
-      makeText(this, W / 2 - 120, y, row.label, 22, '#ffffff');
+      makeText(this, W / 2 - 120, y, row.label, 22, '#6b4423');
       const on = save.settings[row.key];
       makeButton(this, W / 2 + 120, y, 140, 52, on ? 'SÍ' : 'NO', {
-        bg: on ? COLORS.green : 0x64748b,
-        textColor: '#ffffff',
+        bg: on ? COLORS.green : 0xb8a888,
         fontSize: 22,
         onClick: () => {
           const s = loadSave();
@@ -56,12 +64,11 @@ export default class SettingsScene extends Phaser.Scene {
       });
     });
 
-    makeText(this, W / 2 - 120, 420, 'IDIOMA', 22, '#ffffff');
-    makeText(this, W / 2 + 120, 420, 'Español', 20, '#c9bdf0', false);
+    makeText(this, W / 2 - 120, 420, 'IDIOMA', 22, '#6b4423');
+    makeText(this, W / 2 + 120, 420, 'Español', 20, '#a06a35', false);
 
-    // Reiniciar progreso (doble confirmación)
     const resetBtn = makeButton(this, W / 2, 520, 320, 56, 'REINICIAR PROGRESO', {
-      bg: COLORS.red, textColor: '#ffffff', fontSize: 20,
+      bg: COLORS.red, fontSize: 20,
       onClick: () => {
         if (!this.confirmReset) {
           this.confirmReset = true;
@@ -83,8 +90,8 @@ export default class SettingsScene extends Phaser.Scene {
       label.setText('¿SEGURO? TOCA OTRA VEZ');
     }
 
-    makeText(this, W / 2, H - 90, '¡Piso Equivocado! — El Hotel de Monstruos', 16, '#c9bdf0', false);
-    makeText(this, W / 2, H - 60, 'Juego original sin anuncios ni compras reales.', 14, '#8f7fc0', false);
-    makeText(this, W / 2, H - 34, 'Hecho con Phaser 3 · v1.0', 14, '#8f7fc0', false);
+    makeText(this, W / 2, H - 90, '¡Piso Equivocado! — El Hotel de Monstruos', 16, '#a06a35', false);
+    makeText(this, W / 2, H - 60, 'Juego original sin anuncios ni compras reales.', 14, '#a06a35', false);
+    makeText(this, W / 2, H - 34, 'Hecho con Phaser · v1.0', 14, '#a06a35', false);
   }
 }

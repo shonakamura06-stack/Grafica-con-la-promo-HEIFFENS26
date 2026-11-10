@@ -1,8 +1,8 @@
 # Informe de pruebas — ¡Piso Equivocado!
 
-Fecha: 2026-11-10 · Versión del juego: 1.0.0
+Fecha: 2026-11-10 · Versión del juego: 1.1.0 (renovación visual kawaii pastel + drama de piso equivocado)
 
-## Pruebas automatizadas (Vitest) — ✅ 27/27 superadas
+## Pruebas automatizadas (Vitest) — ✅ 31/31 superadas
 
 Ejecutar con `npm test`. Tres suites:
 

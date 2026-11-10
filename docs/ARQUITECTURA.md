@@ -48,6 +48,12 @@ public/
 - **Arte procedural:** cada monstruo se dibuja con primitivas vectoriales
   de Phaser (`Graphics`) en `BootScene`. Siluetas, ojos, bocas y accesorios
   propios por especie; sin recursos externos ni licencias.
+- **Dirección artística kawaii pastel:** cielo melocotón, hotel crema con
+  barandillas y banners de colores por piso, ascensor cápsula de cristal
+  colgado de poleas de madera sonrientes, carteles de madera con borde de
+  cuerda, hierba con bancos y flores, nubes con carita a la deriva y
+  monstruos pastel con contorno grueso marrón. Cada piso tiene un color
+  caramelo propio (insignias, banners, botones y barandillas).
 - **Audio 100 % sintetizado:** efectos y música ambiental original con
   WebAudio (osciladores). Sin archivos de audio ni canciones con licencia.
 - **Recorrido óptimo real:** Dijkstra sobre el estado completo

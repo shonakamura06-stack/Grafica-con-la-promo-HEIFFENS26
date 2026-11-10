@@ -1,11 +1,12 @@
 /**
  * Personalización del hotel — papel de pared, alfombra y puertas
  * del ascensor. Se compran con monedas (sin pagos reales).
+ * Estilo kawaii pastel.
  */
 
 import Phaser from 'phaser';
 import { loadSave, writeSave, CUSTOM_OPTIONS, Customization, getCustomOption } from '../systems/save';
-import { makeButton, makeCoins, makeText, COLORS } from '../systems/ui';
+import { makeButton, makeCoins, makeText, makeWoodSign, COLORS } from '../systems/ui';
 import { audio } from '../systems/audio';
 
 const CATEGORIES: Array<{ key: keyof Customization; title: string }> = [
@@ -15,8 +16,6 @@ const CATEGORIES: Array<{ key: keyof Customization; title: string }> = [
 ];
 
 export default class CustomizeScene extends Phaser.Scene {
-  private coinsText?: Phaser.GameObjects.Text;
-
   constructor() {
     super('customize');
   }
@@ -26,20 +25,27 @@ export default class CustomizeScene extends Phaser.Scene {
     const H = this.scale.height;
 
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x2b1b4d, 0x2b1b4d, 0x17102e, 0x17102e, 1);
+    bg.fillGradientStyle(0xffd9c0, 0xffd9c0, 0xffeef5, 0xffeef5, 1);
     bg.fillRect(0, 0, W, H);
+    const cloudDefs: Array<[number, number, number, number]> = [
+      [70, 140, 0.7, 11000], [470, 240, 0.6, 13000],
+    ];
+    cloudDefs.forEach(([x, y, s, dur]) => {
+      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.9);
+      this.tweens.add({ targets: c, x: x + 22, duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    });
 
     makeButton(this, 52, 40, 76, 48, '◀', {
-      bg: COLORS.panelLight, textColor: '#ffffff', fontSize: 24,
+      bg: COLORS.purple, fontSize: 24,
       onClick: () => this.scene.start('menu'),
     });
-    makeText(this, W / 2, 40, 'MI HOTEL', 32, '#ffd678');
-    const coins = makeCoins(this, W - 70, 40, loadSave().coins);
-    this.coinsText = coins.list[1] as Phaser.GameObjects.Text;
+    makeWoodSign(this, W / 2, 40, 280, 56);
+    makeText(this, W / 2, 40, 'MI HOTEL', 28, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.35)', 3, true, true);
+    makeCoins(this, W - 70, 40, loadSave().coins);
 
     let y = 120;
     for (const cat of CATEGORIES) {
-      makeText(this, W / 2, y, cat.title, 20, '#c9bdf0');
+      makeText(this, W / 2, y, cat.title, 20, '#a06a35');
       y += 44;
       const options = CUSTOM_OPTIONS[cat.key];
       const rowW = 460;
@@ -51,7 +57,7 @@ export default class CustomizeScene extends Phaser.Scene {
       y += 130;
     }
 
-    makeText(this, W / 2, H - 40, 'Gana monedas completando niveles con estrellas', 15, '#8f7fc0', false);
+    makeText(this, W / 2, H - 40, 'Gana monedas completando niveles con estrellas', 15, '#a06a35', false);
   }
 
   private renderOption(
@@ -68,19 +74,21 @@ export default class CustomizeScene extends Phaser.Scene {
     const owned = this.isOwned(category, id);
 
     const g = this.add.graphics();
-    g.fillStyle(0x000000, 0.25);
-    g.fillRoundedRect(x - 48, y - 48 + 4, 96, 96, 14);
+    g.fillStyle(0x000000, 0.1);
+    g.fillRoundedRect(x - 48 + 3, y - 48 + 5, 96, 96, 14);
     g.fillStyle(color, 1);
     g.fillRoundedRect(x - 48, y - 48, 96, 96, 14);
-    g.lineStyle(equipped ? 5 : 3, equipped ? 0xffc93c : 0xffffff, equipped ? 1 : 0.35);
+    g.lineStyle(equipped ? 5 : 3, equipped ? 0xffa94d : 0xa06a35, 1);
     g.strokeRoundedRect(x - 48, y - 48, 96, 96, 14);
+    g.fillStyle(0xffffff, 0.25);
+    g.fillRoundedRect(x - 44, y - 44, 88, 30, 10);
 
-    makeText(this, x, y + 62, name, 12, '#ffffff', false);
+    makeText(this, x, y + 62, name, 12, '#6b4423', false);
     if (equipped) {
-      makeText(this, x, y, '✓', 34, '#1a1033');
+      makeText(this, x, y, '✓', 34, '#2f9e44');
     } else if (!owned) {
       this.add.image(x, y, 'coin').setScale(0.55);
-      makeText(this, x, y + 30, `${price}`, 15, '#1a1033');
+      makeText(this, x, y + 30, `${price}`, 15, '#6b4423');
     }
 
     const zone = this.add.zone(x, y, 96, 96).setInteractive({ useHandCursor: true });

@@ -1,11 +1,12 @@
 /**
  * Pantalla de inicio — ¡Piso Equivocado! El Hotel de Monstruos.
- * Logotipo, monstruo protagonista animado y accesos a todas las secciones.
+ * Estilo kawaii pastel: cielo melocotón, nubes con carita, cartel de
+ * madera, hotel crema y botones caramelo.
  */
 
 import Phaser from 'phaser';
 import { loadSave } from '../systems/save';
-import { makeButton, makeCoins, makeText, COLORS } from '../systems/ui';
+import { makeButton, makeCoins, makeText, makeWoodSign, COLORS } from '../systems/ui';
 import { audio } from '../systems/audio';
 
 export default class MenuScene extends Phaser.Scene {
@@ -16,7 +17,6 @@ export default class MenuScene extends Phaser.Scene {
   create(): void {
     const save = loadSave();
     audio.ensure();
-    // La música arranca tras el primer toque (política de audio móvil).
     this.input.once('pointerdown', () => {
       audio.ensure();
       if (loadSave().settings.music) audio.startMusic();
@@ -25,76 +25,96 @@ export default class MenuScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
 
-    // Fondo: cielo nocturno del hotel
+    // Cielo pastel
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x2b1b4d, 0x2b1b4d, 0x17102e, 0x17102e, 1);
+    bg.fillGradientStyle(0xffd9c0, 0xffd9c0, 0xffeef5, 0xffeef5, 1);
     bg.fillRect(0, 0, W, H);
-    // Estrellas decorativas
-    bg.fillStyle(0xffffff, 0.5);
-    for (let i = 0; i < 40; i++) {
-      bg.fillCircle(Math.random() * W, Math.random() * H * 0.5, Math.random() * 2 + 0.6);
+    // Casitas lejanas
+    const houses: Array<[number, number, number]> = [
+      [10, 640, 0xfbcfe8], [60, 660, 0xbfdbfe], [420, 650, 0xbbf7d0], [470, 670, 0xfde68a],
+    ];
+    for (const [x, y, color] of houses) {
+      bg.fillStyle(color, 1);
+      bg.fillRoundedRect(x, y, 50, 50, 6);
+      bg.fillTriangle(x - 4, y, x + 54, y, x + 25, y - 22);
     }
-    // Silueta del hotel
-    bg.fillStyle(0x241640, 1);
-    bg.fillRoundedRect(W / 2 - 130, 300, 260, H - 300, 16);
-    bg.fillStyle(0xffd678, 0.9);
+    // Nubes a la deriva
+    const cloudDefs: Array<[number, number, number, number]> = [
+      [80, 120, 0.9, 9000], [460, 200, 0.7, 12000], [70, 330, 0.6, 14000], [470, 460, 0.75, 11000],
+    ];
+    cloudDefs.forEach(([x, y, s, dur]) => {
+      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.95);
+      this.tweens.add({ targets: c, x: x + 24, duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    });
+
+    // Hotel crema con hueco menta (silueta decorativa)
+    const hotel = this.add.graphics();
+    hotel.fillStyle(0xfff0d0, 1);
+    hotel.fillRoundedRect(W / 2 - 120, 300, 240, H - 300, 16);
+    hotel.fillStyle(0xf9a8d4, 1);
+    hotel.fillRoundedRect(W / 2 - 124, 292, 248, 16, 8);
+    hotel.fillStyle(0x8fe3d4, 1);
+    hotel.fillRoundedRect(W / 2 - 45, 310, 90, H - 310, 10);
+    hotel.fillStyle(0xffffff, 0.9);
     for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 3; c++) {
-        bg.fillRoundedRect(W / 2 - 100 + c * 80, 330 + r * 62, 48, 40, 8);
+      for (const side of [-1, 1]) {
+        hotel.fillRoundedRect(W / 2 + side * 92 - 22, 330 + r * 62, 44, 40, 8);
       }
     }
+    hotel.fillStyle(0xffa94d, 1);
+    hotel.fillRoundedRect(W / 2 - 60, H - 120, 120, 30, 10);
 
     // Monstruos flotantes decorativos
     const floaters = ['chispa', 'nube', 'glup', 'moco'];
     floaters.forEach((id, i) => {
       const x = 60 + i * ((W - 120) / 3);
-      const s = this.add.image(x, 210 + (i % 2) * 26, `monster-${id}`).setScale(0.55).setAlpha(0.9);
+      const s = this.add.image(x, 210 + (i % 2) * 26, `monster-${id}`).setScale(0.55).setAlpha(0.95);
       this.tweens.add({
         targets: s, y: s.y + 14, duration: 1400 + i * 250,
         yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
       });
     });
 
-    // Logotipo
-    const title = makeText(this, W / 2, 96, '¡PISO EQUIVOCADO!', 44, '#ffd678');
-    title.setShadow(0, 4, '#000000', 6, true, true);
-    makeText(this, W / 2, 140, '— El Hotel de Monstruos —', 22, '#c9bdf0');
+    // Cartel de madera con el logotipo
+    makeWoodSign(this, W / 2, 92, 420, 84);
+    const title = makeText(this, W / 2, 80, '¡PISO EQUIVOCADO!', 40, '#ffffff');
+    title.setShadow(0, 3, 'rgba(0,0,0,0.35)', 4, true, true);
+    makeText(this, W / 2, 116, '— El Hotel de Monstruos —', 19, '#ffe8c2', false);
 
     // Bubu protagonista
-    const bubu = this.add.image(W / 2, 250, 'monster-bubu').setScale(1.15);
+    const bubu = this.add.image(W / 2, 252, 'monster-bubu').setScale(1.15);
     this.tweens.add({
-      targets: bubu, y: 236, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      targets: bubu, y: 238, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
     this.tweens.add({
       targets: bubu, scaleX: 1.22, scaleY: 1.08, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
-    // Monedas
     makeCoins(this, W - 70, 34, save.coins);
 
-    // Botones
+    // Botones caramelo
     const cx = W / 2;
     makeButton(this, cx, 560, 280, 68, '▶  JUGAR', {
       fontSize: 30,
       onClick: () => this.scene.start('levels'),
     });
     makeButton(this, cx, 640, 280, 56, 'NIVELES', {
-      bg: COLORS.panelLight, textColor: '#ffffff', fontSize: 22,
+      bg: COLORS.mintDark, fontSize: 22,
       onClick: () => this.scene.start('levels'),
     });
     makeButton(this, cx, 706, 280, 56, 'ÁLBUM DE MONSTRUOS', {
-      bg: COLORS.panelLight, textColor: '#ffffff', fontSize: 20,
+      bg: COLORS.purple, fontSize: 20,
       onClick: () => this.scene.start('album'),
     });
     makeButton(this, cx, 772, 280, 56, 'MI HOTEL', {
-      bg: COLORS.panelLight, textColor: '#ffffff', fontSize: 22,
+      bg: COLORS.blue, fontSize: 22,
       onClick: () => this.scene.start('customize'),
     });
     makeButton(this, cx, 838, 280, 56, 'AJUSTES', {
-      bg: COLORS.panelLight, textColor: '#ffffff', fontSize: 22,
+      bg: COLORS.green, fontSize: 22,
       onClick: () => this.scene.start('settings'),
     });
 
-    makeText(this, W / 2, H - 26, 'Un juego de ascensor para toda la familia · v1.0', 14, '#8f7fc0', false);
+    makeText(this, W / 2, H - 26, 'Un juego de ascensor para toda la familia · v1.0', 14, '#a06a35', false);
   }
 }
