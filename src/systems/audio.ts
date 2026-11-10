@@ -91,6 +91,17 @@ class AudioEngine {
     [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.45, i * 0.11));
   }
   pop(): void { this.sweep(400, 900, 0.08, 'sine', 0.35); }
+  /** "¡Piso equivocado!": bajada dramática tipo trombón triste. */
+  wrong(): void {
+    this.sweep(392, 370, 0.22, 'sawtooth', 0.22);
+    this.sweep(370, 349, 0.22, 'sawtooth', 0.22, 0.2);
+    this.sweep(349, 311, 0.4, 'sawtooth', 0.25, 0.4);
+  }
+  /** Los monstruos se bajan molestos: bufido descendente. */
+  grumpy(): void {
+    this.sweep(300, 180, 0.3, 'square', 0.18);
+    this.sweep(260, 150, 0.35, 'square', 0.18, 0.15);
+  }
 
   // ── Música ambiental (bucle original) ────────────────────────────────────
   startMusic(): void {

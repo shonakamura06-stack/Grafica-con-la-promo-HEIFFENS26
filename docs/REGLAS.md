@@ -15,9 +15,16 @@ ascensor, respetando su capacidad y las reglas especiales de cada huésped.
   pasajeros de ese piso salen automáticamente con una animación.
 - **Recepción (R):** el ascensor puede volver a recepción en cualquier
   momento. Cuando queda vacío, vuelve solo automáticamente.
-- **Piso equivocado:** si viajas a un piso sin pasajeros destinados, los
-  monstruos reaccionan con humor («¡Piso equivocado!») y la distancia
-  cuenta para la puntuación. Nunca bloquea el nivel.
+- **Piso equivocado:** si viajas a un piso sin pasajeros destinados, la
+  pantalla muestra bordes rojos y «¡PISO EQUIVOCADO!» en grande, y la
+  distancia cuenta para la puntuación. Los monstruos reaccionan según la
+  **paciencia** (indicador arriba a la derecha):
+  - 1er error: caras neutras.
+  - 2º error: caras enojadas.
+  - 3er error: los monstruos vuelven molestos a recepción y debes subirlos
+    de nuevo (el ascensor regresa solo, contando distancia).
+  - Entregar bien a un monstruo reinicia la paciencia. Nunca se bloquea
+    el nivel.
 - **Victoria:** el nivel termina cuando todos los monstruos han llegado a
   su destino. No hace falta volver a recepción tras la última entrega.
 

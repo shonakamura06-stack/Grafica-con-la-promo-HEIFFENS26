@@ -6,6 +6,9 @@
 
 export type SpecialRule = 'none' | 'giant' | 'twins' | 'shy' | 'sleepwalker' | 'ghost';
 
+/** Ánimo del monstruo: feliz (normal), neutral (1er error) o enojado (2º+). */
+export type Mood = 'happy' | 'neutral' | 'angry';
+
 export interface MonsterDef {
   id: string;
   name: string;

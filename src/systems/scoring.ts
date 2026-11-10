@@ -10,7 +10,7 @@
  */
 
 import { LevelDef } from '../data/levels';
-import { MONSTER_MAP, TWIN_GROUP } from '../data/monsters';
+import { MONSTER_MAP, TWIN_GROUP, Mood } from '../data/monsters';
 
 export interface SolveResult {
   optimal: number; // distancia mínima posible
@@ -185,3 +185,16 @@ export function starsFor(distance: number, optimal: number): number {
 export function coinsFor(stars: number): number {
   return 6 + stars * 4;
 }
+
+/**
+ * Ánimo de los pasajeros según los pisos equivocados acumulados:
+ * 0 errores = felices, 1 = neutros, 2 o más = enojados.
+ * Al tercer error los monstruos vuelven molestos a recepción.
+ */
+export function moodForMistakes(mistakes: number): Mood {
+  if (mistakes <= 0) return 'happy';
+  if (mistakes === 1) return 'neutral';
+  return 'angry';
+}
+
+export const MAX_MISTAKES = 3;

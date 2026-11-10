@@ -6,7 +6,7 @@
  * Ejecutar con: npm test
  */
 import { describe, it, expect } from 'vitest';
-import { computeOptimal, starsFor, starThresholds, coinsFor } from '../src/systems/scoring';
+import { computeOptimal, starsFor, starThresholds, coinsFor, moodForMistakes, MAX_MISTAKES } from '../src/systems/scoring';
 import { LevelDef } from '../src/data/levels';
 
 const L = (passengers: Array<[string, number]>, floors = 3, capacity = 3): LevelDef => ({
@@ -82,5 +82,24 @@ describe('estrellas y monedas', () => {
   it('las monedas crecen con las estrellas', () => {
     expect(coinsFor(3)).toBeGreaterThan(coinsFor(2));
     expect(coinsFor(2)).toBeGreaterThan(coinsFor(1));
+  });
+});
+
+describe('ánimos ante pisos equivocados', () => {
+  it('sin errores los monstruos están felices', () => {
+    expect(moodForMistakes(0)).toBe('happy');
+  });
+
+  it('al primer error se ponen neutros', () => {
+    expect(moodForMistakes(1)).toBe('neutral');
+  });
+
+  it('al segundo error se enojan', () => {
+    expect(moodForMistakes(2)).toBe('angry');
+    expect(moodForMistakes(3)).toBe('angry');
+  });
+
+  it('el límite de errores es 3 (vuelven molestos a recepción)', () => {
+    expect(MAX_MISTAKES).toBe(3);
   });
 });
