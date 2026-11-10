@@ -11,9 +11,10 @@
  * - Pisos equivocados: los monstruos se ponen neutros, luego enojados,
  *   y al tercer error vuelven molestos a recepción.
  *
- * Dirección artística kawaii pastel: hotel crema con barandillas de
- * colores, ascensor cápsula de cristal colgado de poleas de madera,
- * cartel de madera, hierba con bancos y flores, nubes con carita.
+ * Dirección artística kawaii: cielo azul, hotel crema con barandillas y
+ * banners de colores, torre de cristal para el ascensor, lobby con
+ * ventanales y recepción con recepcionista, suelo de baldosas, bocadillos
+ * de estrella y monstruos vivos con contorno grueso.
  */
 
 import Phaser from 'phaser';
@@ -46,7 +47,7 @@ const H = 960;
 const BUILD_LEFT = 16;
 const BUILD_RIGHT = 376;
 const BUILD_TOP = 118;
-const LOBBY_TOP = 690;
+const LOBBY_TOP = 640;
 const BUILD_BOTTOM = 760;
 const CAB_X = 210;
 const CAB_W = 150;
@@ -75,12 +76,11 @@ export default class GameScene extends Phaser.Scene {
   private doorR!: Phaser.GameObjects.Graphics;
   private indicator!: Phaser.GameObjects.Text;
   private indicatorBg!: Phaser.GameObjects.Graphics;
-  private floorButtons = new Map<number, { g: Phaser.GameObjects.Graphics; badge: Phaser.GameObjects.Text; badgeBg: Phaser.GameObjects.Graphics }>();
+  private floorButtons = new Map<number, { g: Phaser.GameObjects.Graphics; badge: Phaser.GameObjects.Text; badgeBg: Phaser.GameObjects.Graphics; label: Phaser.GameObjects.Text }>();
   private panelFloorText!: Phaser.GameObjects.Text;
   private distText!: Phaser.GameObjects.Text;
   private progressText!: Phaser.GameObjects.Text;
   private patienceStars: Phaser.GameObjects.Image[] = [];
-  private hintText!: Phaser.GameObjects.Text;
   private bubble!: Phaser.GameObjects.Container;
   private bubbleText!: Phaser.GameObjects.Text;
   private bubbleBg!: Phaser.GameObjects.Graphics;
@@ -193,24 +193,11 @@ export default class GameScene extends Phaser.Scene {
     this.cable.lineBetween(CAB_X, BUILD_TOP + 22, this.cab.x, this.cab.y - CAB_H / 2 - 6);
   }
 
-  // ── Cielo, nubes y casitas ───────────────────────────────────────────────
+  // ── Cielo y nubes ────────────────────────────────────────────────────────
   private drawSky(): void {
     const g = this.add.graphics();
-    g.fillGradientStyle(0xffd9c0, 0xffd9c0, 0xffeef5, 0xffeef5, 1);
+    g.fillGradientStyle(0xaee3f5, 0xaee3f5, 0xd8f3fc, 0xd8f3fc, 1);
     g.fillRect(0, 0, W, H);
-    // Casitas pastel lejanas (detrás del hotel y la cola)
-    const houses: Array<[number, number, number]> = [
-      [6, 700, 0xfbcfe8], [52, 716, 0xbfdbfe], [330, 706, 0xbbf7d0],
-      [452, 700, 0xfde68a], [492, 722, 0xe9d5ff],
-    ];
-    for (const [x, y, color] of houses) {
-      g.fillStyle(color, 1);
-      g.fillRoundedRect(x, y, 44, 44, 6);
-      g.fillTriangle(x - 4, y, x + 48, y, x + 22, y - 20);
-      g.fillStyle(0xffffff, 0.9);
-      g.fillCircle(x + 22, y + 22, 7);
-    }
-    // Nubes con carita a la deriva
     const cloudDefs: Array<[number, number, number, number]> = [
       [70, 130, 0.8, 9000], [470, 190, 0.65, 12000], [60, 420, 0.55, 14000], [480, 560, 0.7, 11000],
     ];
@@ -230,7 +217,7 @@ export default class GameScene extends Phaser.Scene {
 
     const g = this.add.graphics();
     // Sombra del edificio
-    g.fillStyle(0x000000, 0.12);
+    g.fillStyle(0x000000, 0.1);
     g.fillRoundedRect(BUILD_LEFT + 7, BUILD_TOP + 9, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 16);
     // Fachada crema
     g.fillStyle(0xfff0d0, 1);
@@ -246,20 +233,21 @@ export default class GameScene extends Phaser.Scene {
     g.fillStyle(0xffffff, 0.5);
     g.fillRect(BUILD_LEFT + 4, BUILD_TOP - 8, BUILD_RIGHT - BUILD_LEFT - 8, 4);
 
-    // Hueco del ascensor: menta con franjas verticales
-    g.fillGradientStyle(0x8fe3d4, 0x8fe3d4, 0x5cc9b8, 0x5cc9b8, 1);
+    // Torre de cristal del ascensor
+    g.fillStyle(0xbfe8ff, 0.45);
     g.fillRect(SHAFT_LEFT, BUILD_TOP + 6, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 6);
-    g.fillStyle(0xffffff, 0.14);
-    for (let i = 0; i < 4; i++) {
-      g.fillRect(SHAFT_LEFT + 12 + i * 38, BUILD_TOP + 6, 12, BUILD_BOTTOM - BUILD_TOP - 6);
+    g.lineStyle(3, 0xffffff, 0.75);
+    for (let f = 1; f <= N; f++) {
+      g.lineBetween(SHAFT_LEFT, this.bandBottom(f), SHAFT_RIGHT, this.bandBottom(f));
     }
-    // Cuerdas horizontales y poleas de madera sonrientes
-    const pulleyYs = [BUILD_TOP + 34, (BUILD_TOP + BUILD_BOTTOM) / 2, BUILD_BOTTOM - 40];
-    for (const py of pulleyYs) {
-      g.lineStyle(3, 0xa06a35, 0.8);
-      g.lineBetween(SHAFT_LEFT + 4, py, SHAFT_RIGHT - 4, py);
-      this.drawPulley(g, CAB_X, py);
-    }
+    g.lineBetween(CAB_X, BUILD_TOP + 6, CAB_X, BUILD_BOTTOM);
+    g.lineStyle(4, 0x8a7a5a, 1);
+    g.strokeRect(SHAFT_LEFT, BUILD_TOP + 6, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 6);
+    g.fillStyle(0x8a7a5a, 1);
+    g.fillRoundedRect(SHAFT_LEFT - 6, BUILD_TOP - 2, SHAFT_RIGHT - SHAFT_LEFT + 12, 12, 5);
+    // Nube dentro de la torre
+    const shaftCloud = this.add.image(CAB_X, BUILD_TOP + 40, 'cloud').setScale(0.5).setAlpha(0.9);
+    this.tweens.add({ targets: shaftCloud, y: BUILD_TOP + 48, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // Bandas de pisos: barandillas de colores, ventanas y banners
     for (let f = 1; f <= N; f++) {
@@ -267,7 +255,6 @@ export default class GameScene extends Phaser.Scene {
       const color = floorColor(f);
       g.fillStyle(0xffffff, 0.25);
       g.fillRect(BUILD_LEFT + 8, top, BUILD_RIGHT - BUILD_LEFT - 16, fh);
-      // Cornisa
       g.fillStyle(0xf5d9a8, 1);
       g.fillRect(BUILD_LEFT + 8, top, BUILD_RIGHT - BUILD_LEFT - 16, 5);
 
@@ -276,78 +263,104 @@ export default class GameScene extends Phaser.Scene {
       this.drawRailing(g, BUILD_LEFT + 24, top + fh * 0.68, 96, color);
       this.drawRailing(g, BUILD_RIGHT - 94, top + fh * 0.68, 70, color);
 
-      // Marco de puerta del piso en el hueco
-      g.fillStyle(0xfff3d6, 1);
+      // Marco de puerta del piso en la torre
+      g.fillStyle(0xffffff, 0.85);
       g.fillRoundedRect(SHAFT_LEFT - 4, top + 6, SHAFT_RIGHT - SHAFT_LEFT + 8, fh - 10, 6);
-      g.lineStyle(2, 0xa06a35, 0.6);
-      g.strokeRoundedRect(SHAFT_LEFT - 4, top + 6, SHAFT_RIGHT - SHAFT_LEFT + 8, fh - 10, 6);
-      // Banner con el número del piso (bandera de colores)
-      this.drawBanner(g, SHAFT_LEFT - 40, top + 10, f, color);
+      // Banner con el número del piso colgado de la ventana
+      this.drawBanner(g, BUILD_LEFT + 32, top + fh * 0.22 - 2, f, color);
     }
     // Ventanas redondas en el piso superior
     this.drawRoundWindow(g, BUILD_LEFT + 48, BUILD_TOP + 26);
     this.drawRoundWindow(g, BUILD_RIGHT - 48, BUILD_TOP + 26);
+    // Nubecita asomada en una barandilla
+    const midFloor = Math.max(1, Math.floor(N / 2));
+    const peek = this.add.image(BUILD_LEFT + 72, this.bandBottom(midFloor) - fh * 0.68 - 4, 'cloud').setScale(0.42);
+    this.tweens.add({ targets: peek, y: peek.y - 5, duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    // Recepción: alfombra con borde + mostrador de madera + campana + planta
-    g.fillStyle(carpet, 1);
-    g.fillRect(BUILD_LEFT + 8, LOBBY_TOP, BUILD_RIGHT - BUILD_LEFT - 16, BUILD_BOTTOM - LOBBY_TOP);
-    g.lineStyle(2, 0xffc93c, 0.6);
-    g.strokeRect(BUILD_LEFT + 14, LOBBY_TOP + 6, BUILD_RIGHT - BUILD_LEFT - 28, BUILD_BOTTOM - LOBBY_TOP - 12);
-    // Mostrador con profundidad
-    g.fillStyle(0x7c4f24, 1);
-    g.fillRoundedRect(BUILD_LEFT + 96, BUILD_BOTTOM - 28, 104, 28, 6);
-    g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(BUILD_LEFT + 92, BUILD_BOTTOM - 36, 112, 12, 6);
-    g.fillStyle(0xffc93c, 1);
-    g.fillCircle(BUILD_LEFT + 148, BUILD_BOTTOM - 40, 6);
-    g.fillRect(BUILD_LEFT + 141, BUILD_BOTTOM - 38, 14, 3);
-    // Planta
-    g.fillStyle(0xe07b2a, 1);
-    g.fillRoundedRect(BUILD_LEFT + 24, BUILD_BOTTOM - 24, 18, 20, 4);
-    g.fillStyle(0x4ade80, 1);
-    g.fillCircle(BUILD_LEFT + 33, BUILD_BOTTOM - 34, 10);
-    g.fillCircle(BUILD_LEFT + 25, BUILD_BOTTOM - 28, 7);
-    g.fillCircle(BUILD_LEFT + 41, BUILD_BOTTOM - 28, 7);
-    // Cartel de recepción
-    g.lineStyle(2, 0xa06a35, 0.9);
-    g.lineBetween(BUILD_LEFT + 110, LOBBY_TOP, BUILD_LEFT + 110, LOBBY_TOP + 10);
-    g.lineBetween(BUILD_LEFT + 186, LOBBY_TOP, BUILD_LEFT + 186, LOBBY_TOP + 10);
-    g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(BUILD_LEFT + 104, LOBBY_TOP + 10, 88, 20, 6);
-    makeText(this, BUILD_LEFT + 148, LOBBY_TOP + 20, 'RECEPCIÓN', 12, '#ffffff');
-
-    // Zona de cola: hierba con flores y bancos
-    g.fillStyle(0x7ed491, 1);
-    g.fillRoundedRect(8, 786, W - 16, 164, 16);
+    // ── Lobby: ventanales con vista al exterior ──
+    const glassY = LOBBY_TOP + 8;
+    const glassH = BUILD_BOTTOM - LOBBY_TOP - 16;
+    g.fillStyle(0xbfe8ff, 0.85);
+    g.fillRoundedRect(BUILD_LEFT + 8, glassY, BUILD_RIGHT - BUILD_LEFT - 16, glassH, 8);
+    // Vista exterior: suelo verde, árboles y casitas
     g.fillStyle(0x9fe8b0, 1);
-    g.fillRect(8, 786, W - 16, 14);
-    this.drawBench(g, 18, 880);
-    this.drawBench(g, W - 118, 880);
+    g.fillRect(BUILD_LEFT + 8, glassY + glassH - 26, BUILD_RIGHT - BUILD_LEFT - 16, 26);
+    const trees: Array<[number, number]> = [[70, glassY + glassH - 40], [150, glassY + glassH - 34], [300, glassY + glassH - 38]];
+    for (const [tx, ty] of trees) {
+      g.fillStyle(0x7c4f24, 1);
+      g.fillRect(tx - 3, ty, 6, 16);
+      g.fillStyle(0x4ade80, 1);
+      g.fillCircle(tx, ty - 8, 12);
+      g.fillCircle(tx - 9, ty - 2, 8);
+      g.fillCircle(tx + 9, ty - 2, 8);
+    }
+    const houses: Array<[number, number, number]> = [[110, glassY + glassH - 30, 0xfbcfe8], [240, glassY + glassH - 26, 0xbfdbfe], [330, glassY + glassH - 30, 0xfde68a]];
+    for (const [hx, hy, hc] of houses) {
+      g.fillStyle(hc, 1);
+      g.fillRoundedRect(hx, hy, 34, 26, 4);
+      g.fillTriangle(hx - 3, hy, hx + 37, hy, hx + 17, hy - 14);
+    }
+    // Marcos de los ventanales
+    g.lineStyle(4, 0xffffff, 0.95);
+    g.strokeRoundedRect(BUILD_LEFT + 8, glassY, BUILD_RIGHT - BUILD_LEFT - 16, glassH, 8);
+    g.lineStyle(3, 0xffffff, 0.8);
+    for (let i = 1; i < 4; i++) {
+      const vx = BUILD_LEFT + 8 + ((BUILD_RIGHT - BUILD_LEFT - 16) / 4) * i;
+      g.lineBetween(vx, glassY, vx, glassY + glassH);
+    }
+    g.lineBetween(BUILD_LEFT + 8, glassY + glassH / 2, BUILD_RIGHT - 8, glassY + glassH / 2);
+    // Suelo de baldosas del lobby
+    g.fillStyle(carpet, 1);
+    g.fillRect(BUILD_LEFT + 8, BUILD_BOTTOM - 14, BUILD_RIGHT - BUILD_LEFT - 16, 14);
+    // Bancos del lobby a ambos lados de la torre
+    this.drawBench(g, BUILD_LEFT + 12, BUILD_BOTTOM - 44, 88);
+    this.drawBench(g, BUILD_RIGHT - 82, BUILD_BOTTOM - 44, 70);
+
+    // ── Recepción (fuera del edificio, a la derecha) ──
+    const deskX = 404, deskY = 692;
+    g.fillStyle(0x000000, 0.1);
+    g.fillRoundedRect(deskX + 3, deskY + 8, 112, 64, 8);
+    g.fillStyle(0x7c4f24, 1);
+    g.fillRoundedRect(deskX, deskY + 8, 112, 56, 8);
+    g.fillStyle(0xa06a35, 1);
+    g.fillRoundedRect(deskX - 4, deskY, 120, 14, 6);
+    // Planta y monitor sobre el mostrador
+    g.fillStyle(0xe07b2a, 1);
+    g.fillRoundedRect(deskX + 8, deskY - 14, 14, 14, 3);
+    g.fillStyle(0x4ade80, 1);
+    g.fillCircle(deskX + 15, deskY - 20, 8);
+    g.fillStyle(0x241640, 1);
+    g.fillRoundedRect(deskX + 88, deskY - 20, 20, 16, 3);
+    g.fillStyle(0x9fd8ff, 1);
+    g.fillRect(deskX + 91, deskY - 17, 14, 10);
+    // Cartel de recepción
+    g.fillStyle(0xa06a35, 1);
+    g.fillRoundedRect(deskX + 6, deskY - 58, 100, 24, 8);
+    g.lineStyle(2, 0x7c4f24, 1);
+    g.strokeRoundedRect(deskX + 6, deskY - 58, 100, 24, 8);
+    makeText(this, deskX + 56, deskY - 46, 'RECEPCIÓN', 13, '#ffffff');
+    // Recepcionista (Moco) saludando tras el mostrador
+    const receptionist = this.add.image(deskX + 56, deskY - 26, 'monster-moco').setScale(0.5);
+    this.tweens.add({ targets: receptionist, y: deskY - 32, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    // ── Zona de cola: suelo de baldosas con bancos y flores ──
+    g.fillStyle(0xfff3d6, 1);
+    g.fillRoundedRect(8, 786, W - 16, 164, 16);
+    g.lineStyle(2, 0xe8cfa0, 1);
+    for (let tx = 62; tx < W - 8; tx += 54) {
+      g.lineBetween(tx, 786, tx, 950);
+    }
+    for (let ty = 822; ty < 950; ty += 36) {
+      g.lineBetween(8, ty, W - 8, ty);
+    }
+    this.drawBench(g, 18, 896, 100);
+    this.drawBench(g, W - 118, 896, 100);
     const flowerColors = [0xf472b6, 0xffc93c, 0xffffff, 0xf87171, 0xc084fc];
-    for (let i = 0; i < 10; i++) {
-      const fx = 30 + i * 52 + (i % 3) * 8;
-      const fy = 930 + (i % 2) * 10;
+    for (let i = 0; i < 8; i++) {
+      const fx = 140 + i * 36;
+      const fy = 936 + (i % 2) * 8;
       this.drawFlower(g, fx, fy, flowerColors[i % flowerColors.length]);
     }
-
-    // Cartel de madera con la pista de tutorial
-    makeWoodSign(this, W / 2, 806, 470, 34);
-    this.hintText = makeText(this, W / 2, 806, '', 16, '#ffffff');
-    this.hintText.setShadow(0, 2, 'rgba(0,0,0,0.3)', 3, true, true);
-  }
-
-  private drawPulley(g: Phaser.GameObjects.Graphics, x: number, y: number): void {
-    g.fillStyle(0xc98f4e, 1);
-    g.fillCircle(x, y, 15);
-    g.lineStyle(3, 0x7c4f24, 1);
-    g.strokeCircle(x, y, 15);
-    g.fillStyle(0x7c4f24, 1);
-    g.fillCircle(x - 5, y - 2, 2.2);
-    g.fillCircle(x + 5, y - 2, 2.2);
-    g.lineStyle(2, 0x7c4f24, 1);
-    g.beginPath();
-    g.arc(x, y + 2, 6, Math.PI * 0.2, Math.PI * 0.8, false);
-    g.strokePath();
   }
 
   private drawWindow(g: Phaser.GameObjects.Graphics, x: number, y: number, lit: boolean): void {
@@ -391,7 +404,7 @@ export default class GameScene extends Phaser.Scene {
 
   /** Bandera colgante con el número del piso. */
   private drawBanner(g: Phaser.GameObjects.Graphics, x: number, y: number, f: number, color: number): void {
-    const w = 30, h = 46;
+    const w = 26, h = 42;
     g.fillStyle(0x000000, 0.1);
     g.fillRoundedRect(x + 2, y + 3, w, h, 4);
     g.fillStyle(color, 1);
@@ -406,16 +419,16 @@ export default class GameScene extends Phaser.Scene {
       new Phaser.Math.Vector2(x + w, y + h), new Phaser.Math.Vector2(x + w / 2, y + h - 10),
       new Phaser.Math.Vector2(x, y + h),
     ], true);
-    makeText(this, x + w / 2, y + h / 2 - 3, `${f}`, 18, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.3)', 2, true, true);
+    makeText(this, x + w / 2, y + h / 2 - 3, `${f}`, 17, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.3)', 2, true, true);
   }
 
-  private drawBench(g: Phaser.GameObjects.Graphics, x: number, y: number): void {
+  private drawBench(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number): void {
     g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(x, y, 100, 10, 4);
-    g.fillRoundedRect(x, y + 16, 100, 10, 4);
+    g.fillRoundedRect(x, y, w, 10, 4);
+    g.fillRoundedRect(x, y + 16, w, 10, 4);
     g.fillStyle(0x7c4f24, 1);
     g.fillRect(x + 8, y + 26, 8, 18);
-    g.fillRect(x + 84, y + 26, 8, 18);
+    g.fillRect(x + w - 16, y + 26, 8, 18);
   }
 
   private drawFlower(g: Phaser.GameObjects.Graphics, x: number, y: number, color: number): void {
@@ -493,7 +506,8 @@ export default class GameScene extends Phaser.Scene {
       const bg = this.add.graphics();
       const badgeBg = this.add.graphics();
       const badge = makeText(this, x + w / 2 - 12, y - h / 2 + 10, '', 13, '#6b4423');
-      this.floorButtons.set(f, { g: bg, badge, badgeBg });
+      const label = makeText(this, x, y, f === 0 ? 'R' : `${f}`, 24, '#ffffff');
+      this.floorButtons.set(f, { g: bg, badge, badgeBg, label });
       const zone = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
       zone.on('pointerdown', () => {
         this.tweens.add({ targets: bg, scale: 0.92, duration: 60, yoyo: true });
@@ -511,13 +525,12 @@ export default class GameScene extends Phaser.Scene {
     shadow.fillEllipse(0, CAB_H / 2 + 2, CAB_W - 20, 14);
     this.cab.add(shadow);
 
-    // Cuerpo de cristal (cápsula)
+    // Cuerpo de cristal (cápsula casi transparente)
     const body = this.add.graphics();
-    body.fillStyle(0xbfe8ff, 0.45);
+    body.fillStyle(0xbfe8ff, 0.32);
     body.fillRoundedRect(-CAB_W / 2, -CAB_H / 2, CAB_W, CAB_H, 26);
     body.lineStyle(3, 0xffffff, 0.9);
     body.strokeRoundedRect(-CAB_W / 2, -CAB_H / 2, CAB_W, CAB_H, 26);
-    // Brillo del cristal
     body.fillStyle(0xffffff, 0.35);
     body.fillEllipse(-CAB_W / 2 + 34, -CAB_H / 2 + 22, 26, 44);
     this.cab.add(body);
@@ -525,7 +538,7 @@ export default class GameScene extends Phaser.Scene {
     // Puertas de cristal correderas
     const drawDoor = (side: number): Phaser.GameObjects.Graphics => {
       const d = this.add.graphics();
-      d.fillStyle(0xdff4ff, 0.55);
+      d.fillStyle(0xdff4ff, 0.45);
       d.fillRoundedRect(side * (CAB_W / 4) - CAB_W / 4, -CAB_H / 2, CAB_W / 2, CAB_H, 10);
       d.lineStyle(3, 0xffffff, 0.95);
       d.strokeRoundedRect(side * (CAB_W / 4) - CAB_W / 4, -CAB_H / 2, CAB_W / 2, CAB_H, 10);
@@ -977,19 +990,23 @@ export default class GameScene extends Phaser.Scene {
       btn.g.fillStyle(0x000000, 0.12);
       btn.g.fillRoundedRect(x - w / 2, y - h / 2 + 3, w, h, 12);
       if (f === 0) {
-        btn.g.fillStyle(isCurrent ? 0x4ade80 : 0x9fe8d8, 1);
+        btn.g.fillStyle(0x4ade80, 1); // Recepción: verde con R (sin check)
       } else if (count > 0) {
         btn.g.fillStyle(floorColor(f), 1);
       } else if (isCurrent) {
         btn.g.fillStyle(0x4ade80, 1);
       } else {
-        btn.g.fillStyle(0xe8f5f0, 1);
+        btn.g.fillStyle(0xeef7f2, 1);
       }
       btn.g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
       btn.g.fillStyle(0xffffff, 0.25);
       btn.g.fillRoundedRect(x - w / 2 + 3, y - h / 2 + 2, w - 6, h * 0.36, 8);
       btn.g.lineStyle(isCurrent ? 4 : 3, isCurrent ? 0x2f9e44 : 0xa06a35, isCurrent ? 1 : 0.55);
       btn.g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      // Número: blanco sobre color, color del piso sobre fondo claro
+      const colored = f === 0 || count > 0 || isCurrent;
+      btn.label.setColor(colored ? '#ffffff' : Phaser.Display.Color.IntegerToColor(floorColor(f)).rgba);
+      btn.label.setShadow(0, 2, 'rgba(0,0,0,0.25)', 2, true, true);
       btn.badgeBg.clear();
       if (count > 0) {
         btn.badgeBg.fillStyle(0xffffff, 1);
@@ -1008,49 +1025,51 @@ export default class GameScene extends Phaser.Scene {
     return floors.indexOf(f);
   }
 
+  /** Pistas contextuales en bocadillo de estrella sobre la cola. */
   private updateHint(): void {
+    if (this.won) return;
     const queueCount = this.passengers.filter((p) => p.state === 'queue').length;
-    if (this.won) {
-      this.hintText.setText('');
-      return;
-    }
     if (this.level.id === 1) {
       if (this.onboard().length === 0 && this.elevatorFloor === 0 && this.delivered === 0) {
-        this.hintText.setText('1. ¡Toca a tus simpáticos monstruos para que suban!');
+        this.showBubble('¡Púlsalos para que entren!', 270, 802, 5000);
       } else if (this.onboard().length > 0 && this.elevatorFloor === 0) {
-        this.hintText.setText('2. ¡Toca el piso del globo del monstruo!');
+        this.showBubble('¡Ahora toca el piso del globo!', 270, 802, 4000);
       } else if (this.elevatorFloor !== 0 && this.onboard().length > 0) {
-        this.hintText.setText('3. ¡Buen viaje! Toca otro piso si hace falta');
+        this.showBubble('¡Buen viaje!', 270, 802, 3000);
       } else if (this.delivered > 0 && this.onboard().length === 0 && this.elevatorFloor === 0) {
-        this.hintText.setText('¡Bien! Sube a los demás monstruos');
-      } else {
-        this.hintText.setText('');
+        this.showBubble('¡Bien! Sube a los demás', 270, 802, 4000);
       }
       return;
     }
-    // Pistas contextuales en niveles posteriores
     if (this.elevatorFloor !== 0 && this.onboard().length === 0 && queueCount > 0) {
-      this.hintText.setText('¡Vuelve a recepción por los demás monstruos!');
+      this.showBubble('¡Vuelve a recepción!', 270, 802, 3000);
     } else if (this.elevatorFloor === 0 && queueCount > 0 && this.onboard().length === 0) {
-      this.hintText.setText('¡Toca a tus simpáticos monstruos para que suban!');
+      this.showBubble('¡Púlsalos para que entren!', 270, 802, 4000);
     } else if (this.onboard().length > 0) {
-      this.hintText.setText('¡Toca el piso de los globos!');
-    } else {
-      this.hintText.setText('');
+      this.showBubble('¡Toca el piso de los globos!', 270, 802, 3000);
     }
   }
 
+  /** Bocadillo de estrella (estilo cómic) para avisos y pistas. */
   private showBubble(text: string, x: number, y: number, duration = 1600): void {
     this.bubbleText.setText(text);
-    const w = Math.min(360, this.bubbleText.width + 36);
-    const h = 44;
+    const w = Math.min(340, this.bubbleText.width + 56);
+    const h = 66;
     this.bubbleBg.clear();
+    const spikes = 14;
+    const pts: Phaser.Math.Vector2[] = [];
+    for (let i = 0; i < spikes * 2; i++) {
+      const a = (i / (spikes * 2)) * Math.PI * 2;
+      const r = i % 2 === 0 ? 1 : 0.8;
+      pts.push(new Phaser.Math.Vector2(Math.cos(a) * (w / 2) * r, Math.sin(a) * (h / 2) * r));
+    }
     this.bubbleBg.fillStyle(0xffffff, 0.97);
-    this.bubbleBg.fillRoundedRect(-w / 2, -h / 2, w, h, 14);
-    this.bubbleBg.lineStyle(3, 0xa06a35, 1);
-    this.bubbleBg.strokeRoundedRect(-w / 2, -h / 2, w, h, 14);
-    this.bubble.setPosition(x, y).setDepth(60).setVisible(true).setAlpha(1);
+    this.bubbleBg.fillPoints(pts, true);
+    this.bubbleBg.lineStyle(3, 0x6b4423, 1);
+    this.bubbleBg.strokePoints(pts, true);
+    this.bubble.setPosition(x, y).setDepth(60).setVisible(true).setAlpha(1).setScale(0.6);
     this.bubbleText.setPosition(0, 0);
+    this.tweens.add({ targets: this.bubble, scale: 1, duration: 180, ease: 'Back.easeOut' });
     this.bubbleTimer?.remove();
     this.bubbleTimer = this.time.delayedCall(duration, () => {
       this.tweens.add({ targets: this.bubble, alpha: 0, duration: 250, onComplete: () => this.bubble.setVisible(false) });

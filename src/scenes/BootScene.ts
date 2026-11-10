@@ -11,7 +11,7 @@ import { MONSTERS, Mood } from '../data/monsters';
 
 const T = 128; // tamaño de textura de monstruo
 const C = T / 2;
-const OUT = 0x6b4423; // contorno kawaii marrón oscuro
+const OUT = 0x3f2a1a; // contorno grueso oscuro estilo caricatura
 
 type G = Phaser.GameObjects.Graphics;
 
@@ -63,24 +63,29 @@ function feet(g: G, y: number, color: number): void {
 }
 
 function outlineEllipse(g: G, x: number, y: number, w: number, h: number): void {
-  g.lineStyle(4, OUT, 1);
+  g.lineStyle(5, OUT, 1);
   g.strokeEllipse(x, y, w, h);
 }
 
 function outlineCircle(g: G, x: number, y: number, r: number): void {
-  g.lineStyle(4, OUT, 1);
+  g.lineStyle(5, OUT, 1);
   g.strokeCircle(x, y, r);
 }
 
 const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
   bubu(g, mood) {
+    g.lineStyle(4, OUT, 1);
+    g.lineBetween(C - 26, 36, C - 30, 14);
+    g.lineBetween(C + 26, 36, C + 30, 14);
     g.fillStyle(0xffd678, 1);
-    g.fillTriangle(C - 34, 34, C - 24, 8, C - 12, 32);
-    g.fillTriangle(C + 34, 34, C + 24, 8, C + 12, 32);
-    g.fillStyle(0xc084fc, 1);
+    g.fillCircle(C - 30, 11, 8);
+    g.fillCircle(C + 30, 11, 8);
+    outlineCircle(g, C - 30, 11, 8);
+    outlineCircle(g, C + 30, 11, 8);
+    g.fillStyle(0xa855f7, 1);
     g.fillEllipse(C, 72, 92, 84);
     outlineEllipse(g, C, 72, 92, 84);
-    g.fillStyle(0xe9d5ff, 1);
+    g.fillStyle(0xd8b4fe, 1);
     g.fillEllipse(C, 88, 58, 44);
     feet(g, 112, 0x7e22ce);
     eye(g, C, 60, 21, 11);
@@ -124,13 +129,13 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     cheeks(g, C, 84, 24);
   },
   moco(g, mood) {
-    g.fillStyle(0x86efac, 1);
+    g.fillStyle(0x4ade80, 1);
     g.fillCircle(C, 66, 40);
     g.fillEllipse(C, 92, 70, 34);
     outlineCircle(g, C, 66, 40);
-    g.fillStyle(0xbbf7d0, 1);
-    g.fillEllipse(C - 14, 52, 30, 20);
     g.fillStyle(0x86efac, 1);
+    g.fillEllipse(C - 14, 52, 30, 20);
+    g.fillStyle(0x4ade80, 1);
     g.fillCircle(C - 16, 30, 9);
     g.fillCircle(C + 16, 30, 9);
     outlineCircle(g, C - 16, 30, 9);
@@ -143,31 +148,31 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillEllipse(C - 18, 58, 16, 26);
   },
   nube(g, mood) {
-    g.fillStyle(0xbfdbfe, 1);
+    g.fillStyle(0x60a5fa, 1);
     g.fillCircle(C - 26, 74, 22);
     g.fillCircle(C, 62, 28);
     g.fillCircle(C + 26, 74, 22);
     g.fillEllipse(C, 82, 92, 34);
     outlineEllipse(g, C, 82, 92, 34);
-    g.fillStyle(0xdbeafe, 1);
+    g.fillStyle(0x93c5fd, 1);
     g.fillEllipse(C, 76, 70, 26);
-    g.lineStyle(4, 0x3b82f6, 1);
+    g.lineStyle(4, 0x2563eb, 1);
     g.beginPath(); g.arc(C - 13, 72, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
     g.beginPath(); g.arc(C + 13, 72, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
     if (mood === 'angry') angryBrows(g, C, 72, 13);
     if (mood === 'happy') {
-      g.fillStyle(0x3b82f6, 1);
+      g.fillStyle(0x2563eb, 1);
       g.fillEllipse(C, 88, 10, 12);
     } else {
-      mouth(g, mood, C, 86, 9, 0x3b82f6);
+      mouth(g, mood, C, 86, 9, 0x2563eb);
     }
     cheeks(g, C, 84, 26);
-    g.fillStyle(0x93c5fd, 0.9);
+    g.fillStyle(0x60a5fa, 0.9);
     g.fillCircle(C + 40, 100, 5);
     g.fillCircle(C + 46, 110, 3.5);
   },
   draculin(g, mood) {
-    g.fillStyle(0x6d28d9, 1);
+    g.fillStyle(0x7c3aed, 1);
     g.fillTriangle(C - 30, 108, C + 30, 108, C, 62);
     g.fillStyle(0xfff1f2, 1);
     g.fillCircle(C, 62, 36);
@@ -189,20 +194,20 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     } else {
       mouth(g, mood, C, 78, 9, 0x9f1239);
     }
-    g.fillStyle(0xf87171, 1);
+    g.fillStyle(0xef4444, 1);
     g.fillTriangle(C - 2, 100, C - 14, 94, C - 14, 106);
     g.fillTriangle(C + 2, 100, C + 14, 94, C + 14, 106);
     g.fillCircle(C, 100, 4);
   },
   rufi(g, mood) {
-    g.fillStyle(0xfdba74, 1);
+    g.fillStyle(0xfb923c, 1);
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
       g.fillCircle(C + Math.cos(a) * 36, 68 + Math.sin(a) * 36, 13);
     }
     g.fillCircle(C, 68, 38);
     outlineCircle(g, C, 68, 38);
-    g.fillStyle(0xfb923c, 1);
+    g.fillStyle(0xea580c, 1);
     g.fillCircle(C - 30, 34, 15);
     g.fillCircle(C + 30, 34, 15);
     outlineCircle(g, C - 30, 34, 15);
@@ -226,7 +231,7 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     cheeks(g, C, 78, 26);
   },
   glup(g, mood) {
-    g.fillStyle(0x5eead4, 1);
+    g.fillStyle(0x2dd4bf, 1);
     g.fillEllipse(C, 72, 78, 88);
     outlineEllipse(g, C, 72, 78, 88);
     g.fillTriangle(C - 8, 30, C + 16, 30, C + 4, 8);
@@ -249,14 +254,14 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     cheeks(g, C, 80, 26);
   },
   sombrin(g, mood) {
-    g.fillStyle(0x64748b, 1);
+    g.fillStyle(0x475569, 1);
     g.fillCircle(C, 70, 40);
     outlineCircle(g, C, 70, 40);
-    g.fillStyle(0xfde68a, 1);
+    g.fillStyle(0xfacc15, 1);
     g.fillCircle(C + 6, 28, 15);
     g.fillStyle(0x64748b, 1);
     g.fillCircle(C + 13, 24, 13);
-    g.fillStyle(0x94a3b8, 1);
+    g.fillStyle(0x64748b, 1);
     g.fillEllipse(C, 88, 56, 36);
     eye(g, C - 13, 66, 10, 5, 4);
     eye(g, C + 13, 66, 10, 5, 4);
@@ -267,10 +272,10 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillCircle(C + 24, 78, 6);
   },
   gordito(g, mood) {
-    g.fillStyle(0xf9a8d4, 1);
+    g.fillStyle(0xf472b6, 1);
     g.fillEllipse(C, 72, 104, 92);
     outlineEllipse(g, C, 72, 104, 92);
-    g.fillStyle(0xfbcfe8, 1);
+    g.fillStyle(0xf9a8d4, 1);
     g.fillEllipse(C, 88, 64, 48);
     g.fillStyle(0xffd678, 1);
     g.fillPoints([
@@ -284,7 +289,7 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     if (mood === 'angry') angryBrows(g, C, 56, 16);
     mouth(g, mood, C, 70, 13);
     cheeks(g, C, 76, 34);
-    g.fillStyle(0xf9a8d4, 1);
+    g.fillStyle(0xf472b6, 1);
     g.fillCircle(C - 52, 80, 10);
     g.fillCircle(C + 52, 80, 10);
     g.fillStyle(0xffffff, 0.4);
@@ -292,7 +297,7 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
   },
   gemelos(g, mood) {
     const drawTwin = (cx: number) => {
-      g.fillStyle(0x5eead4, 1);
+      g.fillStyle(0x2dd4bf, 1);
       g.fillCircle(cx, 78, 27);
       outlineCircle(g, cx, 78, 27);
       g.lineStyle(3, OUT, 1);
@@ -303,7 +308,7 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
       eye(g, cx + 9, 74, 8, 4.5);
       if (mood === 'angry') angryBrows(g, cx, 74, 9);
       mouth(g, mood, cx, 86, 8, 0x134e4a);
-      g.fillStyle(0xf87171, 1);
+      g.fillStyle(0xef4444, 1);
       g.fillTriangle(cx - 1, 100, cx - 10, 95, cx - 10, 105);
       g.fillTriangle(cx + 1, 100, cx + 10, 95, cx + 10, 105);
     };
@@ -314,12 +319,12 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillTriangle(C - 6, 52, C + 6, 52, C, 62);
   },
   nocti(g, mood) {
-    g.fillStyle(0xa5b4fc, 1);
+    g.fillStyle(0x818cf8, 1);
     g.fillCircle(C, 70, 40);
     outlineCircle(g, C, 70, 40);
-    g.fillStyle(0xe0e7ff, 1);
+    g.fillStyle(0xc7d2fe, 1);
     g.fillCircle(C, 72, 29);
-    g.fillStyle(0x6366f1, 1);
+    g.fillStyle(0x4f46e5, 1);
     g.fillTriangle(C - 22, 40, C + 10, 34, C + 26, 52);
     g.fillCircle(C + 27, 53, 7);
     g.fillStyle(0xffffff, 1);
@@ -328,13 +333,13 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillStyle(0x1e1b4b, 1);
     g.fillCircle(C - 12, 71, 6);
     g.fillCircle(C + 12, 71, 6);
-    g.fillStyle(0xe0e7ff, 1);
+    g.fillStyle(0xc7d2fe, 1);
     g.fillRect(C - 25, 56, 26, 8);
     g.fillRect(C - 1, 56, 26, 8);
     if (mood === 'angry') angryBrows(g, C, 68, 12);
     g.fillStyle(0xfdba74, 1);
     g.fillTriangle(C - 5, 78, C + 5, 78, C, 86);
-    g.lineStyle(3, 0x6366f1, 1);
+    g.lineStyle(3, 0x4f46e5, 1);
     g.lineBetween(C + 34, 30, C + 42, 30);
     g.lineBetween(C + 38, 34, C + 46, 34);
     g.lineBetween(C + 34, 38, C + 42, 38);

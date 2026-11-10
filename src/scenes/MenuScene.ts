@@ -27,7 +27,7 @@ export default class MenuScene extends Phaser.Scene {
 
     // Cielo pastel
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0xffd9c0, 0xffd9c0, 0xffeef5, 0xffeef5, 1);
+    bg.fillGradientStyle(0xaee3f5, 0xaee3f5, 0xd8f3fc, 0xd8f3fc, 1);
     bg.fillRect(0, 0, W, H);
     // Casitas lejanas
     const houses: Array<[number, number, number]> = [
@@ -53,8 +53,10 @@ export default class MenuScene extends Phaser.Scene {
     hotel.fillRoundedRect(W / 2 - 120, 300, 240, H - 300, 16);
     hotel.fillStyle(0xf9a8d4, 1);
     hotel.fillRoundedRect(W / 2 - 124, 292, 248, 16, 8);
-    hotel.fillStyle(0x8fe3d4, 1);
+    hotel.fillStyle(0xbfe8ff, 0.8);
     hotel.fillRoundedRect(W / 2 - 45, 310, 90, H - 310, 10);
+    hotel.lineStyle(3, 0xffffff, 0.9);
+    hotel.strokeRoundedRect(W / 2 - 45, 310, 90, H - 310, 10);
     hotel.fillStyle(0xffffff, 0.9);
     for (let r = 0; r < 5; r++) {
       for (const side of [-1, 1]) {

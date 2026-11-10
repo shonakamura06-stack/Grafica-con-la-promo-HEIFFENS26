@@ -20,7 +20,7 @@ export default class LevelSelectScene extends Phaser.Scene {
     const H = this.scale.height;
 
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0xffd9c0, 0xffd9c0, 0xffeef5, 0xffeef5, 1);
+    bg.fillGradientStyle(0xaee3f5, 0xaee3f5, 0xd8f3fc, 0xd8f3fc, 1);
     bg.fillRect(0, 0, W, H);
     const cloudDefs: Array<[number, number, number, number]> = [
       [70, 150, 0.7, 10000], [470, 260, 0.6, 13000], [60, 700, 0.65, 12000],
