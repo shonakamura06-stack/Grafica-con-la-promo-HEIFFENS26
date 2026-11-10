@@ -1,0 +1,22 @@
+{
+  "name": "piso-equivocado-hotel-de-monstruos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "¡Piso Equivocado! El Hotel de Monstruos — videojuego móvil 2D de rompecabezas con ascensor",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.8"
+  }
+}

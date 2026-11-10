@@ -1,0 +1,373 @@
+/**
+ * Escena de arranque — genera TODAS las texturas del juego de forma
+ * procedural (arte vectorial original, sin recursos externos).
+ * Cada monstruo tiene silueta, ojos, boca y accesorios propios.
+ */
+
+import Phaser from 'phaser';
+import { MONSTERS } from '../data/monsters';
+
+const T = 128; // tamaño de textura de monstruo
+const C = T / 2;
+
+type G = Phaser.GameObjects.Graphics;
+
+function eye(g: G, x: number, y: number, r: number, pupilR: number, lookY = 0): void {
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0x241640, 1);
+  g.fillCircle(x, y + lookY, pupilR);
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(x + pupilR * 0.35, y + lookY - pupilR * 0.35, pupilR * 0.4);
+}
+
+function smile(g: G, x: number, y: number, r: number, color = 0x3c145a): void {
+  g.lineStyle(4, color, 1);
+  g.beginPath();
+  g.arc(x, y, r, Math.PI * 0.15, Math.PI * 0.85, false);
+  g.strokePath();
+}
+
+function cheeks(g: G, x: number, y: number, spread: number, color = 0xf9a8d4): void {
+  g.fillStyle(color, 0.55);
+  g.fillCircle(x - spread, y, 7);
+  g.fillCircle(x + spread, y, 7);
+}
+
+function feet(g: G, y: number, color: number): void {
+  g.fillStyle(color, 1);
+  g.fillEllipse(C - 18, y, 22, 12);
+  g.fillEllipse(C + 18, y, 22, 12);
+}
+
+const DRAWERS: Record<string, (g: G) => void> = {
+  bubu(g) {
+    g.fillStyle(0xffd678, 1);
+    g.fillTriangle(C - 34, 34, C - 24, 8, C - 12, 32);
+    g.fillTriangle(C + 34, 34, C + 24, 8, C + 12, 32);
+    g.fillStyle(0xa855f7, 1);
+    g.fillEllipse(C, 72, 92, 84);
+    g.fillStyle(0xc084fc, 1);
+    g.fillEllipse(C, 88, 58, 44);
+    feet(g, 112, 0x6b21a8);
+    eye(g, C, 60, 21, 11);
+    smile(g, C, 80, 15);
+    cheeks(g, C, 84, 30);
+  },
+  chispa(g) {
+    g.fillStyle(0xfacc15, 1);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + 0.2;
+      const x1 = C + Math.cos(a) * 34, y1 = 70 + Math.sin(a) * 34;
+      const x2 = C + Math.cos(a + 0.35) * 34, y2 = 70 + Math.sin(a + 0.35) * 34;
+      const xt = C + Math.cos(a + 0.17) * 56, yt = 70 + Math.sin(a + 0.17) * 56;
+      g.fillTriangle(x1, y1, x2, y2, xt, yt);
+    }
+    g.fillStyle(0xfde047, 1);
+    g.fillCircle(C, 70, 38);
+    g.fillStyle(0xfb923c, 1);
+    g.fillPoints([
+      new Phaser.Math.Vector2(C - 4, 22), new Phaser.Math.Vector2(C + 10, 34),
+      new Phaser.Math.Vector2(C + 2, 40), new Phaser.Math.Vector2(C + 14, 46),
+      new Phaser.Math.Vector2(C - 2, 52), new Phaser.Math.Vector2(C - 8, 38),
+    ], true);
+    eye(g, C - 13, 66, 11, 6);
+    eye(g, C + 13, 66, 11, 6);
+    g.fillStyle(0x7f1d1d, 1);
+    g.slice(C, 82, 13, 0, Math.PI, false);
+    g.fillPath();
+    g.fillStyle(0xf472b6, 1);
+    g.slice(C, 88, 8, 0, Math.PI, false);
+    g.fillPath();
+    cheeks(g, C, 84, 24, 0xfdba74);
+  },
+  moco(g) {
+    g.fillStyle(0x4ade80, 1);
+    g.fillCircle(C, 66, 40);
+    g.fillEllipse(C, 92, 70, 34);
+    g.fillStyle(0x86efac, 1);
+    g.fillEllipse(C - 14, 52, 30, 20);
+    g.fillStyle(0x4ade80, 1);
+    g.fillCircle(C - 16, 30, 9);
+    g.fillCircle(C + 16, 30, 9);
+    eye(g, C - 16, 30, 8, 4.5, 2);
+    eye(g, C + 16, 30, 8, 4.5, 2);
+    g.lineStyle(4, 0x14532d, 1);
+    g.beginPath();
+    g.arc(C, 78, 12, Math.PI * 1.1, Math.PI * 1.9, false);
+    g.strokePath();
+    g.fillStyle(0xffffff, 0.35);
+    g.fillEllipse(C - 18, 58, 16, 26);
+  },
+  nube(g) {
+    g.fillStyle(0x93c5fd, 1);
+    g.fillCircle(C - 26, 74, 22);
+    g.fillCircle(C, 62, 28);
+    g.fillCircle(C + 26, 74, 22);
+    g.fillEllipse(C, 82, 92, 34);
+    g.fillStyle(0xbfdbfe, 1);
+    g.fillEllipse(C, 76, 70, 26);
+    g.lineStyle(4, 0x1e40af, 1);
+    g.beginPath(); g.arc(C - 13, 72, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
+    g.beginPath(); g.arc(C + 13, 72, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
+    g.fillStyle(0x1e40af, 1);
+    g.fillEllipse(C, 88, 10, 12);
+    cheeks(g, C, 84, 26, 0xf9a8d4);
+    g.fillStyle(0x60a5fa, 0.8);
+    g.fillCircle(C + 40, 100, 5);
+    g.fillCircle(C + 46, 110, 3.5);
+  },
+  draculin(g) {
+    g.fillStyle(0x4c1d95, 1);
+    g.fillTriangle(C - 30, 108, C + 30, 108, C, 62);
+    g.fillStyle(0xfee2e2, 1);
+    g.fillCircle(C, 62, 36);
+    g.fillStyle(0x4c1d95, 1);
+    g.slice(C, 58, 37, Math.PI, Math.PI * 2, false);
+    g.fillPath();
+    g.fillTriangle(C - 36, 56, C - 50, 44, C - 34, 44);
+    g.fillTriangle(C + 36, 56, C + 50, 44, C + 34, 44);
+    eye(g, C - 13, 64, 10, 5.5);
+    eye(g, C + 13, 64, 10, 5.5);
+    g.lineStyle(3, 0x7f1d1d, 1);
+    g.beginPath(); g.arc(C, 78, 9, Math.PI * 0.15, Math.PI * 0.85, false); g.strokePath();
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(C - 7, 80, C - 3, 80, C - 5, 88);
+    g.fillTriangle(C + 3, 80, C + 7, 80, C + 5, 88);
+    g.fillStyle(0xef4444, 1);
+    g.fillTriangle(C - 2, 100, C - 14, 94, C - 14, 106);
+    g.fillTriangle(C + 2, 100, C + 14, 94, C + 14, 106);
+    g.fillCircle(C, 100, 4);
+  },
+  rufi(g) {
+    g.fillStyle(0xfb923c, 1);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      g.fillCircle(C + Math.cos(a) * 36, 68 + Math.sin(a) * 36, 13);
+    }
+    g.fillCircle(C, 68, 38);
+    g.fillStyle(0xea580c, 1);
+    g.fillCircle(C - 30, 34, 15);
+    g.fillCircle(C + 30, 34, 15);
+    g.fillStyle(0xfbcfe8, 1);
+    g.fillCircle(C - 30, 34, 8);
+    g.fillCircle(C + 30, 34, 8);
+    eye(g, C - 14, 60, 11, 6);
+    eye(g, C + 14, 60, 11, 6);
+    g.fillStyle(0x7c2d12, 1);
+    g.fillEllipse(C, 76, 18, 13);
+    g.fillStyle(0xffffff, 1);
+    g.fillRoundedRect(C - 10, 84, 20, 13, 3);
+    g.lineStyle(2, 0x7c2d12, 1);
+    g.lineBetween(C, 84, C, 97);
+    cheeks(g, C, 78, 26, 0xfdba74);
+  },
+  glup(g) {
+    g.fillStyle(0x2dd4bf, 1);
+    g.fillEllipse(C, 72, 78, 88);
+    g.fillTriangle(C - 8, 30, C + 16, 30, C + 4, 8);
+    g.fillTriangle(C - 38, 66, C - 56, 78, C - 36, 84);
+    g.fillStyle(0x99f6e4, 1);
+    g.fillEllipse(C, 84, 48, 52);
+    eye(g, C - 14, 60, 12, 6.5);
+    eye(g, C + 14, 60, 12, 6.5);
+    g.fillStyle(0x134e4a, 1);
+    g.fillEllipse(C, 82, 13, 15);
+    g.lineStyle(3, 0xffffff, 0.9);
+    g.strokeCircle(C + 34, 34, 8);
+    g.strokeCircle(C + 44, 20, 5.5);
+    g.strokeCircle(C + 28, 18, 4);
+    cheeks(g, C, 80, 26, 0x5eead4);
+  },
+  sombrin(g) {
+    g.fillStyle(0x334155, 1);
+    g.fillCircle(C, 70, 40);
+    g.fillStyle(0xfacc15, 1);
+    g.fillCircle(C + 6, 28, 15);
+    g.fillStyle(0x334155, 1);
+    g.fillCircle(C + 13, 24, 13);
+    g.fillStyle(0x475569, 1);
+    g.fillEllipse(C, 88, 56, 36);
+    eye(g, C - 13, 66, 10, 5, 4);
+    eye(g, C + 13, 66, 10, 5, 4);
+    g.lineStyle(3, 0x0f172a, 1);
+    g.beginPath();
+    g.arc(C, 84, 8, Math.PI * 1.15, Math.PI * 1.85, false);
+    g.strokePath();
+    g.fillStyle(0x94a3b8, 0.5);
+    g.fillCircle(C - 24, 78, 6);
+    g.fillCircle(C + 24, 78, 6);
+  },
+  gordito(g) {
+    g.fillStyle(0xf472b6, 1);
+    g.fillEllipse(C, 72, 104, 92);
+    g.fillStyle(0xfbcfe8, 1);
+    g.fillEllipse(C, 88, 64, 48);
+    g.fillStyle(0xfacc15, 1);
+    g.fillPoints([
+      new Phaser.Math.Vector2(C - 20, 30), new Phaser.Math.Vector2(C - 20, 12),
+      new Phaser.Math.Vector2(C - 10, 24), new Phaser.Math.Vector2(C, 8),
+      new Phaser.Math.Vector2(C + 10, 24), new Phaser.Math.Vector2(C + 20, 12),
+      new Phaser.Math.Vector2(C + 20, 30),
+    ], true);
+    eye(g, C - 16, 56, 10, 5.5);
+    eye(g, C + 16, 56, 10, 5.5);
+    smile(g, C, 70, 13);
+    cheeks(g, C, 76, 34, 0xf9a8d4);
+    g.fillStyle(0xf472b6, 1);
+    g.fillCircle(C - 52, 80, 10);
+    g.fillCircle(C + 52, 80, 10);
+  },
+  gemelos(g) {
+    const drawTwin = (cx: number) => {
+      g.fillStyle(0x2dd4bf, 1);
+      g.fillCircle(cx, 78, 27);
+      g.lineStyle(3, 0x0d9488, 1);
+      g.lineBetween(cx, 52, cx, 40);
+      g.fillStyle(0xfacc15, 1);
+      g.fillCircle(cx, 37, 6);
+      eye(g, cx - 9, 74, 8, 4.5);
+      eye(g, cx + 9, 74, 8, 4.5);
+      smile(g, cx, 86, 8, 0x134e4a);
+      g.fillStyle(0xef4444, 1);
+      g.fillTriangle(cx - 1, 100, cx - 10, 95, cx - 10, 105);
+      g.fillTriangle(cx + 1, 100, cx + 10, 95, cx + 10, 105);
+    };
+    drawTwin(38);
+    drawTwin(90);
+    g.fillStyle(0xf472b6, 1);
+    g.fillCircle(C, 52, 6);
+    g.fillTriangle(C - 6, 52, C + 6, 52, C, 62);
+  },
+  nocti(g) {
+    g.fillStyle(0x818cf8, 1);
+    g.fillCircle(C, 70, 40);
+    g.fillStyle(0xc7d2fe, 1);
+    g.fillCircle(C, 72, 29);
+    g.fillStyle(0x4338ca, 1);
+    g.fillTriangle(C - 22, 40, C + 10, 34, C + 26, 52);
+    g.fillCircle(C + 27, 53, 7);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(C - 12, 68, 12);
+    g.fillCircle(C + 12, 68, 12);
+    g.fillStyle(0x1e1b4b, 1);
+    g.fillCircle(C - 12, 71, 6);
+    g.fillCircle(C + 12, 71, 6);
+    g.fillStyle(0xc7d2fe, 1);
+    g.fillRect(C - 25, 56, 26, 8);
+    g.fillRect(C - 1, 56, 26, 8);
+    g.fillStyle(0xfb923c, 1);
+    g.fillTriangle(C - 5, 78, C + 5, 78, C, 86);
+    g.lineStyle(3, 0x4338ca, 1);
+    g.lineBetween(C + 34, 30, C + 42, 30);
+    g.lineBetween(C + 38, 34, C + 46, 34);
+    g.lineBetween(C + 34, 38, C + 42, 38);
+  },
+  fantasmita(g) {
+    g.fillStyle(0xf1f5f9, 0.95);
+    g.fillCircle(C, 62, 36);
+    g.fillRect(C - 36, 62, 72, 34);
+    g.fillCircle(C - 24, 96, 10);
+    g.fillCircle(C, 98, 10);
+    g.fillCircle(C + 24, 96, 10);
+    g.lineStyle(4, 0x94a3b8, 1);
+    g.beginPath(); g.arc(C - 13, 62, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
+    g.beginPath(); g.arc(C + 13, 62, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
+    g.fillStyle(0x64748b, 1);
+    g.fillEllipse(C, 78, 11, 13);
+    cheeks(g, C, 76, 24, 0xfda4af);
+    g.fillStyle(0xf1f5f9, 0.95);
+    g.fillEllipse(C - 40, 76, 16, 10);
+    g.fillEllipse(C + 40, 76, 16, 10);
+  },
+};
+
+export default class BootScene extends Phaser.Scene {
+  constructor() {
+    super('boot');
+  }
+
+  create(): void {
+    // Monstruos
+    for (const m of MONSTERS) {
+      const g = this.add.graphics();
+      DRAWERS[m.id](g);
+      g.generateTexture(`monster-${m.id}`, T, T);
+      g.destroy();
+    }
+
+    // Corazón
+    {
+      const g = this.add.graphics();
+      g.fillStyle(0xf472b6, 1);
+      g.fillCircle(14, 13, 9);
+      g.fillCircle(30, 13, 9);
+      g.fillTriangle(6, 18, 38, 18, 22, 40);
+      g.generateTexture('heart', 44, 44);
+      g.destroy();
+    }
+    // Estrella
+    {
+      const g = this.add.graphics();
+      const pts: Phaser.Math.Vector2[] = [];
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const r = i % 2 === 0 ? 26 : 11;
+        pts.push(new Phaser.Math.Vector2(28 + Math.cos(a) * r, 28 + Math.sin(a) * r));
+      }
+      g.fillStyle(0xffc93c, 1);
+      g.fillPoints(pts, true);
+      g.lineStyle(3, 0xe09e00, 1);
+      g.strokePoints(pts, true);
+      g.generateTexture('star', 56, 56);
+      g.destroy();
+    }
+    // Moneda
+    {
+      const g = this.add.graphics();
+      g.fillStyle(0xe09e00, 1);
+      g.fillCircle(22, 22, 20);
+      g.fillStyle(0xffc93c, 1);
+      g.fillCircle(22, 22, 16);
+      g.fillStyle(0xffe08a, 1);
+      g.fillCircle(22, 22, 10);
+      g.generateTexture('coin', 44, 44);
+      g.destroy();
+    }
+    // Destello
+    {
+      const g = this.add.graphics();
+      g.fillStyle(0xffffff, 0.9);
+      g.fillTriangle(12, 0, 15, 9, 24, 12);
+      g.fillTriangle(12, 24, 15, 15, 24, 12);
+      g.fillTriangle(12, 24, 9, 15, 0, 12);
+      g.fillTriangle(12, 0, 9, 9, 0, 12);
+      g.generateTexture('sparkle', 24, 24);
+      g.destroy();
+    }
+    // Candado
+    {
+      const g = this.add.graphics();
+      g.lineStyle(6, 0x94a3b8, 1);
+      g.beginPath();
+      g.arc(22, 18, 11, Math.PI, 0, false);
+      g.strokePath();
+      g.fillStyle(0x64748b, 1);
+      g.fillRoundedRect(6, 18, 32, 24, 6);
+      g.fillStyle(0x1e293b, 1);
+      g.fillCircle(22, 29, 4);
+      g.generateTexture('lock', 44, 44);
+      g.destroy();
+    }
+    // Sombra suave
+    {
+      const g = this.add.graphics();
+      g.fillStyle(0x000000, 0.28);
+      g.fillEllipse(32, 10, 60, 18);
+      g.generateTexture('shadow', 64, 20);
+      g.destroy();
+    }
+
+    this.scene.start('menu');
+  }
+}

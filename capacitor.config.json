@@ -1,0 +1,8 @@
+{
+  "appId": "com.heiffens.pisoequivocado",
+  "appName": "¡Piso Equivocado!",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
