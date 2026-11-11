@@ -120,3 +120,18 @@ PWA, Service Worker e iconos 192/512.
 - Tutorial: se activa solo en nivel 1 o con mecánica nueva; pausa el temporizador;
   botón SALTAR y repaso desde PAUSA («RESE TE EXPLICA»).
 - Perdón: la primera equivocación del nivel no resta estrella (una sola vez por nivel).
+
+## Actualización: diálogos, victoria excéntrica, vidas y monstruos alien
+
+- `npm test`: **47/47 pruebas pasan** (41 anteriores + 6 nuevas de economía de corazones).
+- `npm run build` sin errores; preview de producción y dev sirviendo el bundle nuevo.
+- Diálogos: caja inferior estilo novela visual, typewriter letra a letra, voz pausada por
+  frase (Web Audio con offset exacto por línea) y «haz clic para continuar» abajo-derecha.
+- Victoria: panel feria con rayos girando, estrellas chunky secuenciales con burst,
+  stats PASOS/MONEDAS con iconos dibujados, botones 3D jugosos con iconos y confeti.
+- Vidas: corazones globales persistentes; panel sin vidas con espera 25 min, anuncio de
+  recompensa (promoción propia de 12 s) y premium 19,99 Bs/mes (demo sin cobro en web).
+- Monstruos: Rufi y Glup redibujados como aliens (cuernos/tercer ojo/pinchos/cola-maza;
+  linterna abisal/tentáculos/antenas) — ya no parecen ratón ni pez.
+- Animaciones: botones con hundimiento y rebote Back.easeOut en todo el juego y
+  fundido de entrada de cámara en las 6 escenas.

@@ -77,11 +77,20 @@ export function makeButton(
   const container = scene.add.container(x, y, [g, text, hit]);
   container.setSize(w, h);
 
+  const baseY = y;
   hit.on('pointerdown', () => {
-    scene.tweens.add({ targets: container, scale: 0.94, duration: 60, yoyo: true });
+    scene.tweens.killTweensOf(container);
+    scene.tweens.add({ targets: container, scaleX: 1.06, scaleY: 0.88, y: baseY + 4, duration: 80, ease: 'Quad.easeOut' });
     if (opts.sound !== false) audio.click();
-    opts.onClick();
   });
+  const release = () => {
+    scene.tweens.killTweensOf(container);
+    scene.tweens.add({
+      targets: container, scaleX: 1, scaleY: 1, y: baseY, duration: 260, ease: 'Back.easeOut',
+    });
+  };
+  hit.on('pointerup', () => { release(); opts.onClick(); });
+  hit.on('pointerout', release);
   return container;
 }
 

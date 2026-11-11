@@ -29,6 +29,10 @@ export interface SaveData {
   owned: Record<string, boolean>;     // "categoria_id" -> comprado
   settings: Settings;
   seenTutorials: string[];            // reglas especiales ya explicadas
+  hearts: number;                     // corazones globales 0..3 (niveles con vidas)
+  heartsRefillAt: number;             // ms epoch: con 0 corazones, cuándo se recargan solos
+  premiumUntil: number;               // ms epoch: vidas infinitas sin anuncios; 0 = sin premium
+  adsWatched: number;                 // anuncios de recompensa vistos (estadística)
 }
 
 const KEY = 'piso-equivocado-save-v1';
@@ -45,6 +49,10 @@ export function defaultSave(): SaveData {
     owned: {},
     settings: { sound: true, music: true, vibration: true },
     seenTutorials: [],
+    hearts: 3,
+    heartsRefillAt: 0,
+    premiumUntil: 0,
+    adsWatched: 0,
   };
 }
 
@@ -63,6 +71,10 @@ export function loadSave(): SaveData {
       stars: parsed.stars ?? {},
       monstersUnlocked: parsed.monstersUnlocked ?? base.monstersUnlocked,
       seenTutorials: parsed.seenTutorials ?? [],
+      hearts: typeof parsed.hearts === 'number' && parsed.hearts >= 0 && parsed.hearts <= 3 ? parsed.hearts : 3,
+      heartsRefillAt: typeof parsed.heartsRefillAt === 'number' ? parsed.heartsRefillAt : 0,
+      premiumUntil: typeof parsed.premiumUntil === 'number' ? parsed.premiumUntil : 0,
+      adsWatched: typeof parsed.adsWatched === 'number' ? parsed.adsWatched : 0,
       version: SAVE_VERSION,
     };
     // Validación extra: si algún dato viene corrupto, se corrige.
@@ -141,4 +153,44 @@ export const CUSTOM_OPTIONS: Record<keyof Customization, CustomOption[]> = {
 export function getCustomOption(category: keyof Customization, id: string): CustomOption {
   const list = CUSTOM_OPTIONS[category];
   return list.find((o) => o.id === id) ?? list[0];
+}
+
+
+// ── Economía de corazones (vidas) ──────────────────────────────────────────
+export const REFILL_MS = 25 * 60 * 1000;   // 25 minutos para recuperar los 3 corazones
+export const PREMIUM_MS = 30 * 24 * 60 * 60 * 1000; // 1 mes de vidas infinitas
+
+export function isPremium(save: SaveData, now: number = Date.now()): boolean {
+  return save.premiumUntil > now;
+}
+
+/** Si pasó el tiempo de espera, recarga los 3 corazones. */
+export function tickHearts(save: SaveData, now: number = Date.now()): SaveData {
+  if (!isPremium(save, now) && save.hearts <= 0 && save.heartsRefillAt > 0 && now >= save.heartsRefillAt) {
+    save.hearts = 3;
+    save.heartsRefillAt = 0;
+  }
+  return save;
+}
+
+/** Gasta un corazón global. Devuelve los corazones restantes. */
+export function spendHeart(save: SaveData, now: number = Date.now()): number {
+  if (isPremium(save, now)) return 3;
+  tickHearts(save, now);
+  save.hearts = Math.max(0, save.hearts - 1);
+  if (save.hearts === 0) save.heartsRefillAt = now + REFILL_MS;
+  return save.hearts;
+}
+
+/** Recarga inmediata (por anuncio de recompensa). */
+export function refillHearts(save: SaveData): void {
+  save.hearts = 3;
+  save.heartsRefillAt = 0;
+}
+
+export function formatMs(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
 }

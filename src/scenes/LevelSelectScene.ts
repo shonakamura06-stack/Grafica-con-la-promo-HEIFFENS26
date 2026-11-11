@@ -5,7 +5,8 @@
 
 import Phaser from 'phaser';
 import { LEVELS, TOTAL_LEVELS } from '../data/levels';
-import { loadSave } from '../systems/save';
+import { loadSave, tickHearts, isPremium } from '../systems/save';
+import { openOutOfLives } from '../systems/lives';
 import { makeButton, makeCoins, makeText, makeWoodSign, COLORS } from '../systems/ui';
 import { audio } from '../systems/audio';
 
@@ -15,6 +16,7 @@ export default class LevelSelectScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.cameras.main.fadeIn(320);
     const save = loadSave();
     const W = this.scale.width;
     const H = this.scale.height;
@@ -37,6 +39,14 @@ export default class LevelSelectScene extends Phaser.Scene {
     makeWoodSign(this, W / 2, 40, 240, 56);
     makeText(this, W / 2, 40, 'NIVELES', 28, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.35)', 3, true, true);
     makeCoins(this, W - 70, 40, save.coins);
+    // Corazones globales (niveles 15+): se ven también aquí.
+    tickHearts(save);
+    for (let i = 0; i < 3; i++) {
+      const h = this.add.image(W - 118 + i * 30, 84, 'heart').setScale(0.5);
+      if (isPremium(save)) h.setTint(0xf472b6);
+      else if (i >= save.hearts) h.setTint(0x555555);
+    }
+    if (isPremium(save)) makeText(this, W - 22, 84, '∞', 20, '#ef4444');
 
     const totalStars = Object.values(save.stars).reduce((a, b) => a + b, 0);
     makeText(this, W / 2, 84, `${Object.keys(save.stars).length}/${TOTAL_LEVELS} niveles · ${totalStars} estrellas`, 18, '#a06a35', false);
@@ -88,6 +98,16 @@ export default class LevelSelectScene extends Phaser.Scene {
           return;
         }
         audio.select();
+        if (lvl.lives > 0) {
+          tickHearts(save);
+          if (!isPremium(save) && save.hearts <= 0) {
+            openOutOfLives(this, save, {
+              onExit: () => this.scene.start('menu'),
+              onRefilled: () => this.scene.restart(),
+            });
+            return;
+          }
+        }
         this.scene.start('game', { levelId: lvl.id });
       });
     });

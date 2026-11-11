@@ -26,6 +26,8 @@ import { queueLine, arrivalLine, pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTI
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
 import { RESE_VOICE } from '../data/reseVoice';
+import { openOutOfLives } from '../systems/lives';
+import { isPremium, tickHearts, spendHeart } from '../systems/save';
 
 type PaxState = 'queue' | 'boarding' | 'onboard' | 'exiting' | 'delivered';
 
@@ -124,6 +126,15 @@ export default class GameScene extends Phaser.Scene {
   private reseOverlay!: Phaser.GameObjects.Rectangle;
   private reseHint!: Phaser.GameObjects.Text;
   private forgiveMoves = 0;        // movimientos que Rese perdona en la estrella
+  private useHearts = false;       // este nivel usa corazones globales
+  private reseBuf?: AudioBuffer;
+  private reseSrc?: AudioBufferSourceNode;
+  private reseGain?: GainNode;
+  private typeEvent?: Phaser.Time.TimerEvent;
+  private segEvent?: Phaser.Time.TimerEvent;
+  private fullLine = '';
+  private lineIdx = -1;
+  private lineReady = true;
 
   constructor() {
     super('game');
@@ -144,7 +155,9 @@ export default class GameScene extends Phaser.Scene {
     this.paused = false;
     this.floorButtons.clear();
     this.patienceStars = [];
-    this.lives = this.level.lives;
+    this.useHearts = this.level.lives > 0;
+    tickHearts(this.save);
+    this.lives = this.useHearts ? (isPremium(this.save) ? 3 : this.save.hearts) : 0;
     this.livesIcons = [];
     this.timeLeft = this.level.timeLimit;
     this.separations = 0;
@@ -192,6 +205,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.cameras.main.fadeIn(320);
     audio.ensure();
     if (this.save.settings.music) audio.startMusic();
     this.input.once('pointerdown', () => audio.ensure());
@@ -477,11 +491,12 @@ export default class GameScene extends Phaser.Scene {
 
     // Corazones de vida (desde el nivel 15) y temporizador, DEBAJO del cartel.
     this.livesIcons = [];
-    if (this.level.lives > 0) {
-      for (let i = 0; i < this.level.lives; i++) {
+    if (this.useHearts) {
+      for (let i = 0; i < 3; i++) {
         const h = this.add.image(30 + i * 34, 96, 'heart').setScale(0.62);
         this.livesIcons.push(h);
       }
+      if (isPremium(this.save)) makeText(this, 30 + 3 * 34 + 4, 96, '∞', 22, '#ef4444');
     }
     this.timeText = makeText(this, 210, 96, `${this.timeLeft}s`, 16, '#6b4423', false);
     this.timeBar = this.add.graphics();
@@ -522,38 +537,47 @@ export default class GameScene extends Phaser.Scene {
     if (this.won) return;
     this.timerEvent?.remove();
     audio.wrong();
-    if (this.level.lives > 0) {
-      this.loseLife('¡Se acabó el tiempo!');
-    } else {
-      this.showBubble('¡Se acabó el tiempo! Inténtalo otra vez.', CAB_X, 300, 2400);
-      this.time.delayedCall(1600, () => this.scene.restart({ levelId: this.level.id }));
-    }
+    this.failLevel('¡Se acabó el tiempo!');
   }
 
-  /** Pierde un corazón; si no quedan, nivel fallado. */
+  /** Gasta un corazón global; sin corazones, panel de espera/anuncio/premium. */
   private loseLife(reason: string): void {
-    if (this.lives <= 0) return;
-    this.lives--;
+    if (!this.useHearts) return;
+    if (isPremium(this.save)) {
+      this.showBubble(`${reason} (Premium: corazones infinitos)`, CAB_X, 300, 1800);
+      return;
+    }
+    this.lives = spendHeart(this.save);
+    writeSave(this.save);
     audio.wrong();
     if (this.save.settings.vibration) vibrate([80, 40, 80]);
+    this.livesIcons.forEach((h) => this.tweens.add({ targets: h, scale: 1.0, duration: 80, yoyo: true, onStart: () => h.setScale(0.4) }));
     this.livesIcons.forEach((h, i) => h.setTint(i < this.lives ? 0xffffff : 0x555555));
     this.flashVignette();
     if (this.lives <= 0) {
-      this.showBubble('¡Te quedaste sin corazones!', CAB_X, 300, 2400);
-      this.time.delayedCall(1800, () => this.failLevel());
+      this.won = true; // bloquea la entrada mientras se decide qué hacer
+      openOutOfLives(this, this.save, {
+        onExit: () => this.scene.start('levels'),
+        onRefilled: () => {
+          this.won = false;
+          this.lives = this.save.hearts;
+          this.livesIcons.forEach((h, i) => h.setTint(i < this.lives ? 0xffffff : 0x555555));
+          this.showBubble('¡Corazones recargados! Sigue jugando.', CAB_X, 300, 2000);
+        },
+      });
     } else {
       this.showBubble(`${reason} Te quedan ${this.lives} corazones.`, CAB_X, 300, 2200);
     }
   }
 
-  private failLevel(): void {
+  private failLevel(reason = '¡Nivel fallado!'): void {
     if (this.won) return;
     this.won = true; // bloquea la entrada
     const c = this.add.container(0, 0).setDepth(100);
     const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.5).setOrigin(0).setInteractive();
     c.add(dim);
     c.add(makePanel(this, W / 2, H / 2, 420, 360));
-    c.add(makeText(this, W / 2, H / 2 - 120, '¡Nivel fallado!', 32, '#ef4444'));
+    c.add(makeText(this, W / 2, H / 2 - 120, reason, 32, '#ef4444'));
     c.add(makeText(this, W / 2, H / 2 - 70, 'No te rindas, recepcionista.', 18, '#6b4423', false));
     c.add(makeText(this, W / 2, H / 2 - 40, 'Tus monedas y niveles se conservan.', 16, '#6b4423', false));
     const retry = makeButton(this, W / 2, H / 2 + 30, 260, 58, 'REINTENTAR', {
@@ -1482,27 +1506,44 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ── Recepcionista Rese: personaje guía ─────────────────────────────────
-  // ── Recepcionista Rese: guía en media pantalla ───────────────────────────
+  // ── Recepcionista Rese: diálogo abajo, letra a letra, clic para continuar ──
   private createReceptionist(): void {
-    // Fondo oscurecido mientras Rese explica.
-    this.reseOverlay = this.add.rectangle(W / 2, H / 2, W, H, 0x1e2a4a, 0.45).setDepth(66).setVisible(false);
-    // Rese: sube desde abajo hasta ocupar media pantalla.
+    this.reseOverlay = this.add.rectangle(W / 2, H / 2, W, H, 0x1e2a4a, 0.45).setDepth(66).setVisible(false).setInteractive();
+    this.reseOverlay.on('pointerdown', () => this.reseAdvance());
     this.reseImg = this.add.image(W / 2, H + 280, 'rese').setDepth(68).setVisible(false);
-    this.reseImg.setDisplaySize(400, 400); // media pantalla al subir
+    this.reseImg.setDisplaySize(400, 400);
     const reseSkin = getCustomOption('rese', this.save.custom.rese);
     if (reseSkin.id !== 'azul') this.reseImg.setTint(reseSkin.color);
+    // Caja de diálogo estilo novela visual, abajo.
     this.receptionistBg = this.add.graphics().setDepth(70);
-    this.receptionistText = this.add.text(0, 0, '', {
-      fontFamily: 'Arial, sans-serif', fontSize: '17px', color: '#1e3a8a',
-      align: 'center', wordWrap: { width: 380 },
+    this.receptionistText = this.add.text(W / 2, 836, '', {
+      fontFamily: 'Arial, sans-serif', fontSize: '19px', color: '#1e3a8a',
+      align: 'center', wordWrap: { width: 440 },
     }).setOrigin(0.5).setDepth(70);
-    this.receptionist = this.add.container(0, 0, [this.receptionistBg, this.receptionistText]).setDepth(70).setVisible(false);
-    this.reseHint = makeText(this, W / 2, H - 448, 'toca SALTAR si ya lo sabes', 13, '#ffffff').setOrigin(0.5).setDepth(71).setVisible(false);
+    this.reseHint = makeText(this, 504, 928, 'haz clic para continuar ▶', 14, '#8a6fd0').setOrigin(1, 0.5).setDepth(71).setVisible(false);
     this.reseSkipBtn = makeButton(this, W - 88, 46, 152, 44, 'SALTAR ▶', {
       bg: COLORS.purple, fontSize: 16, onClick: () => this.hideRese(),
     }).setDepth(72).setVisible(false);
-    // Explicación inicial: nivel 1 o mecánica nueva.
+    this.receptionist = this.add.container(0, 0, [this.receptionistBg, this.receptionistText, this.reseHint]).setDepth(70).setVisible(false);
     this.time.delayedCall(800, () => this.showTutorialIfNeeded());
+  }
+
+  private drawDialogBox(): void {
+    const g = this.receptionistBg;
+    g.clear();
+    g.fillStyle(0x1e2a4a, 0.3);
+    g.fillRoundedRect(30, 744, 492, 208, 20);
+    g.fillStyle(0xfff8ea, 0.98);
+    g.fillRoundedRect(24, 736, 492, 208, 20);
+    g.lineStyle(5, 0x1e3a8a, 1);
+    g.strokeRoundedRect(24, 736, 492, 208, 20);
+    g.lineStyle(2, 0xffffff, 0.7);
+    g.strokeRoundedRect(31, 743, 478, 194, 15);
+    // Chip con el nombre
+    g.fillStyle(0x1e3a8a, 1);
+    g.fillRoundedRect(40, 720, 86, 32, 10);
+    g.lineStyle(3, 0xffffff, 0.9);
+    g.strokeRoundedRect(40, 720, 86, 32, 10);
   }
 
   /** Explica paso a paso solo en nivel 1 o cuando aparece una mecánica nueva. */
@@ -1524,61 +1565,128 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Rese sube desde abajo (media pantalla), habla con su voz y avanza línea a línea. */
+  /** Rese sube desde abajo y habla: texto letra a letra y clic para continuar. */
   private reseSay(key: string): void {
     if (this.reseActive || this.won) return;
     const clip = RESE_VOICE[key];
     if (!clip) return;
     this.reseClipKey = key;
     this.reseActive = true;
+    this.lineIdx = -1;
+    this.lineReady = true;
     this.reseOverlay.setAlpha(0.45).setVisible(true);
+    this.receptionist.setVisible(true);
+    this.drawDialogBox();
     this.reseImg.setVisible(true);
     this.reseSkipBtn.setVisible(true);
     this.tweens.killTweensOf(this.reseImg);
     this.tweens.add({
-      targets: this.reseImg, y: H - 235, duration: 650, ease: 'Back.easeOut',
+      targets: this.reseImg, y: 560, duration: 650, ease: 'Back.easeOut',
       onComplete: () => {
-        this.tweens.add({ targets: this.reseImg, y: H - 225, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: this.reseImg, y: 572, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       },
     });
-    // Voz de Rese (respeta el ajuste de sonido del juego).
-    this.sound.mute = !this.save.settings.sound;
-    this.sound.stopAll();
-    this.sound.play(key);
-    // Avance de líneas sincronizado con el audio.
-    this.reseEvents.forEach((e) => e.remove());
-    this.reseEvents = [];
-    clip.t.forEach((t, i) => {
-      this.reseEvents.push(this.time.delayedCall(Math.max(0, t * 1000 - 150), () => this.showReseLine(i)));
-    });
-    this.reseEvents.push(this.time.delayedCall(clip.dur * 1000 + 600, () => this.hideRese()));
+    // Voz de Rese con Web Audio directo (control exacto por línea).
+    this.initReseAudio(key);
+    this.reseAdvance();
+  }
+
+  /** Un clic: completa la línea actual; otro clic: pasa a la siguiente. */
+  private reseAdvance(): void {
+    if (!this.reseActive) return;
+    if (!this.lineReady) {
+      this.typeEvent?.remove();
+      this.segEvent?.remove();
+      this.receptionistText.setText(this.fullLine);
+      this.stopReseAudio();
+      this.lineReady = true;
+      this.reseHint.setVisible(true);
+      this.blinkHint();
+      return;
+    }
+    this.lineIdx++;
+    const clip = RESE_VOICE[this.reseClipKey];
+    if (this.lineIdx >= clip.lines.length) { this.hideRese(); return; }
+    this.showReseLine(this.lineIdx);
   }
 
   private showReseLine(i: number): void {
-    if (!this.reseActive) return;
     const clip = RESE_VOICE[this.reseClipKey];
-    this.receptionistText.setText(clip.lines[i]);
-    const w = Math.min(470, this.receptionistText.width + 44);
-    const h = Math.max(56, this.receptionistText.height + 28);
-    this.receptionistBg.clear();
-    this.receptionistBg.fillStyle(0xffffff, 0.97);
-    this.receptionistBg.fillRoundedRect(-w / 2, -h / 2, w, h, 16);
-    this.receptionistBg.lineStyle(4, 0x1e3a8a, 1);
-    this.receptionistBg.strokeRoundedRect(-w / 2, -h / 2, w, h, 16);
-    this.receptionistBg.fillStyle(0xffffff, 0.97);
-    this.receptionistBg.fillTriangle(-14, h / 2 - 3, 14, h / 2 - 3, 0, h / 2 + 16);
-    this.receptionist.setPosition(W / 2, 400).setVisible(true);
-    this.reseHint.setVisible(true);
+    this.fullLine = clip.lines[i];
+    this.lineReady = false;
+    this.tweens.killTweensOf(this.reseHint);
+    this.reseHint.setAlpha(1).setVisible(false);
+    this.typeEvent?.remove();
+    this.receptionistText.setText('');
+    let n = 0;
+    this.typeEvent = this.time.addEvent({
+      delay: 24, loop: true,
+      callback: () => {
+        n += 1;
+        this.receptionistText.setText(this.fullLine.slice(0, n));
+        if (n >= this.fullLine.length) this.typeEvent?.remove();
+      },
+    });
+    // La voz salta a esta línea y se pausa al terminarla: espera el clic del niño.
+    this.playReseFrom(clip.t[i]);
+    const seg = (i + 1 < clip.t.length ? clip.t[i + 1] : clip.dur) - clip.t[i];
+    this.segEvent?.remove();
+    this.segEvent = this.time.delayedCall(Math.max(500, seg * 1000 - 120), () => {
+      if (!this.reseActive || this.lineReady) return;
+      this.typeEvent?.remove();
+      this.receptionistText.setText(this.fullLine);
+      this.stopReseAudio();
+      this.lineReady = true;
+      this.reseHint.setVisible(true);
+      this.blinkHint();
+    });
+  }
+
+  /** Prepara el buffer de voz de Rese y el volumen según ajustes. */
+  private initReseAudio(key: string): void {
+    const sm = this.sound as Phaser.Sound.WebAudioSoundManager;
+    const ctx = sm.context;
+    if (ctx.state === 'suspended') void ctx.resume();
+    this.reseBuf = this.cache.audio.get(key) as AudioBuffer | undefined;
+    if (!this.reseGain) {
+      this.reseGain = ctx.createGain();
+      this.reseGain.connect(ctx.destination);
+    }
+    this.reseGain.gain.value = this.save.settings.sound ? 0.9 : 0;
+  }
+
+  /** Reproduce la voz de Rese desde un segundo exacto del clip. */
+  private playReseFrom(sec: number): void {
+    this.stopReseAudio();
+    if (!this.reseBuf || !this.reseGain) return;
+    const sm = this.sound as Phaser.Sound.WebAudioSoundManager;
+    const src = sm.context.createBufferSource();
+    src.buffer = this.reseBuf;
+    src.connect(this.reseGain);
+    src.start(0, sec);
+    this.reseSrc = src;
+  }
+
+  private stopReseAudio(): void {
+    try { this.reseSrc?.stop(); } catch { /* ya detenido */ }
+    this.reseSrc = undefined;
+  }
+
+  private blinkHint(): void {
+    this.tweens.killTweensOf(this.reseHint);
+    this.reseHint.setAlpha(1);
+    this.tweens.add({ targets: this.reseHint, alpha: 0.35, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 
   private hideRese(): void {
     if (!this.reseActive) return;
     this.reseActive = false;
-    this.reseEvents.forEach((e) => e.remove());
-    this.reseEvents = [];
-    this.sound.stopAll();
+    this.typeEvent?.remove();
+    this.segEvent?.remove();
+    this.stopReseAudio();
+    this.tweens.killTweensOf(this.reseHint);
+    this.reseHint.setAlpha(1).setVisible(false);
     this.receptionist.setVisible(false);
-    this.reseHint.setVisible(false);
     this.reseSkipBtn.setVisible(false);
     this.tweens.killTweensOf(this.reseImg);
     this.tweens.add({ targets: this.reseImg, y: H + 280, duration: 500, ease: 'Back.easeIn', onComplete: () => this.reseImg.setVisible(false) });
@@ -1615,67 +1723,217 @@ export default class GameScene extends Phaser.Scene {
     writeSave(this.save);
     if (newMonsters.length > 0) audio.unlock();
 
-    for (let i = 0; i < 24; i++) {
-      const s = this.add.image(Math.random() * W, -20, 'sparkle')
-        .setDepth(95).setScale(0.6 + Math.random());
-      this.tweens.add({
-        targets: s, y: H + 30, x: s.x + (Math.random() - 0.5) * 80,
-        duration: 1400 + Math.random() * 1200, onComplete: () => s.destroy(),
-      });
-    }
-
+    // ── Celebración excéntrica estilo cartel de feria ──
     const c = this.add.container(0, 0).setDepth(100);
-    const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.4).setOrigin(0).setInteractive();
+    const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.5).setOrigin(0).setInteractive();
     c.add(dim);
-    c.add(makePanel(this, W / 2, H / 2, 440, 520));
-    c.add(makeText(this, W / 2, H / 2 - 210, '¡NIVEL COMPLETADO!', 30, '#a06a35'));
+    // Rayos de sol girando detrás del panel
+    const rays = this.add.graphics();
+    rays.fillStyle(0xffd678, 0.16);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      rays.beginPath();
+      rays.moveTo(W / 2, H / 2);
+      rays.lineTo(W / 2 + Math.cos(a) * 900, H / 2 + Math.sin(a) * 900);
+      rays.lineTo(W / 2 + Math.cos(a + 0.26) * 900, H / 2 + Math.sin(a + 0.26) * 900);
+      rays.closePath();
+      rays.fillPath();
+    }
+    this.tweens.add({ targets: rays, angle: 360, duration: 26000, repeat: -1 });
+    c.add(rays);
+    // Panel beige con sombra y doble borde
+    const panel = this.add.graphics();
+    panel.fillStyle(0xd4b58c, 0.55);
+    panel.fillRoundedRect(W / 2 - 185 + 7, H / 2 - 268 + 11, 380, 545, 26);
+    panel.fillStyle(0xfcf5e3, 1);
+    panel.fillRoundedRect(W / 2 - 185, H / 2 - 268, 380, 545, 26);
+    panel.lineStyle(4, 0xd4b58c, 1);
+    panel.strokeRoundedRect(W / 2 - 185, H / 2 - 268, 380, 545, 26);
+    panel.lineStyle(3, 0xffffff, 0.85);
+    panel.strokeRoundedRect(W / 2 - 176, H / 2 - 259, 362, 527, 20);
+    c.add(panel);
+    c.setScale(0.5).setAlpha(0);
+    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 450, ease: 'Back.easeOut' });
 
-    const starsRow = makeStars(this, W / 2, H / 2 - 150, 0, 1.3);
-    c.add(starsRow);
-    starsRow.list.forEach((s, i) => {
-      const img = s as Phaser.GameObjects.Image;
-      img.setScale(0.01);
-      this.time.delayedCall(400 + i * 350, () => {
-        if (i < stars) audio.star(i);
-        this.tweens.add({ targets: img, scale: 1.3, duration: 300, ease: 'Back.easeOut' });
+    const title = this.add.text(W / 2, H / 2 - 226, '¡NIVEL COMPLETADO!', {
+      fontFamily: 'Arial Black, Impact, sans-serif', fontSize: '33px', color: '#FDBB2D',
+      stroke: '#6D3A14', strokeThickness: 10,
+    }).setOrigin(0.5);
+    title.setShadow(0, 4, '#6D3A14', 0, true, true);
+    c.add(title);
+    this.tweens.add({ targets: title, scale: 1.06, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    // Estrellas gorditas que aparecen una a una con explosión de brillos
+    for (let i = 0; i < 3; i++) {
+      const filled = i < stars;
+      const sx = W / 2 + (i - 1) * 95;
+      const sy = H / 2 - 132 + (i === 1 ? -26 : 0);
+      const star = this.add.graphics();
+      drawChunkyStar(star, filled);
+      star.setPosition(sx, sy);
+      star.setAngle(i === 0 ? -15 : i === 2 ? 15 : 0);
+      star.setScale(0.01);
+      c.add(star);
+      this.time.delayedCall(500 + i * 380, () => {
+        if (filled) audio.star(i);
+        this.tweens.add({ targets: star, scale: 1, duration: 420, ease: 'Back.easeOut' });
+        if (filled) this.starBurst(sx, sy);
       });
-    });
-
-    c.add(makeText(this, W / 2, H / 2 - 80, `Recorrido: ${this.distance} · Óptimo: ${this.optimal}`, 18, '#6b4423', false));
-    if (record) {
-      c.add(makeText(this, W / 2, H / 2 - 56, '¡RÉCORD! ¡Eres un genio! +150 monedas', 15, '#2f9e44', false));
-    } else if (perfect) {
-      c.add(makeText(this, W / 2, H / 2 - 56, '¡Solución perfecta! +50 monedas', 15, '#2f9e44', false));
     }
-    if (penalties > 0) {
-      c.add(makeText(this, W / 2, H / 2 - 56, `Reglas rotas: ${penalties} (-${penalties} estrella)`, 15, '#ef4444', false));
-    }
-    const coinRow = this.add.container(W / 2, H / 2 - 38);
-    coinRow.add(this.add.image(0, 0, 'coin').setScale(0.7));
-    coinRow.add(makeText(this, 24, 0, `+${earned}`, 24, '#a06a35'));
-    c.add(coinRow);
 
+    // Paneles de estadísticas: pasos y monedas
+    const stats = this.add.graphics();
+    stats.fillStyle(0xece0d1, 1);
+    stats.fillRoundedRect(W / 2 - 160, H / 2 - 54, 150, 70, 16);
+    stats.fillRoundedRect(W / 2 + 10, H / 2 - 54, 150, 70, 16);
+    c.add(stats);
+    const elev = this.add.graphics();
+    elev.fillStyle(0xba8b62, 1);
+    elev.fillRoundedRect(W / 2 - 148, H / 2 - 44, 36, 46, 6);
+    elev.lineStyle(3, 0x6d3a14, 1);
+    elev.strokeRoundedRect(W / 2 - 148, H / 2 - 44, 36, 46, 6);
+    elev.fillStyle(0x6d3a14, 1);
+    elev.fillTriangle(W / 2 - 130, H / 2 - 36, W / 2 - 135, H / 2 - 29, W / 2 - 125, H / 2 - 29);
+    elev.fillTriangle(W / 2 - 130, H / 2 - 2, W / 2 - 135, H / 2 - 9, W / 2 - 125, H / 2 - 9);
+    elev.fillRect(W / 2 - 132, H / 2 - 29, 4, 20);
+    c.add(elev);
+    const coinIco = this.add.graphics();
+    coinIco.fillStyle(0xe5a91a, 1);
+    coinIco.fillCircle(W / 2 + 40, H / 2 - 19, 22);
+    coinIco.fillStyle(0xffd700, 1);
+    coinIco.fillCircle(W / 2 + 40, H / 2 - 19, 17);
+    coinIco.fillStyle(0xffeca3, 0.8);
+    coinIco.fillEllipse(W / 2 + 40, H / 2 - 26, 14, 6);
+    c.add(coinIco);
+    const stepsT = this.add.text(W / 2 - 102, H / 2 - 19, `PASOS: ${this.distance}`, {
+      fontFamily: 'Arial Black, sans-serif', fontSize: '19px', color: '#5C3A21',
+    }).setOrigin(0, 0.5);
+    const coinsT = this.add.text(W / 2 + 70, H / 2 - 19, `+${earned}`, {
+      fontFamily: 'Arial Black, sans-serif', fontSize: '24px', color: '#5C3A21',
+    }).setOrigin(0, 0.5);
+    c.add([stepsT, coinsT]);
+    this.tweens.add({ targets: stepsT, x: W / 2 - 96, duration: 500, delay: 700, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: coinsT, x: W / 2 + 76, duration: 500, delay: 800, ease: 'Back.easeOut' });
+
+    let banner = '';
+    let bannerColor = '#2f9e44';
+    if (record) banner = '¡RÉCORD! Superaste el óptimo: +150 monedas';
+    else if (perfect) banner = '¡PERFECTO! Ruta óptima: +50 monedas';
+    if (penalties > 0) { banner = `Reglas rotas: ${penalties} (-${penalties} estrella)`; bannerColor = '#ef4444'; }
+    if (banner) c.add(makeText(this, W / 2, H / 2 + 34, banner, 16, bannerColor, false));
     if (newMonsters.length > 0) {
       const names = newMonsters.map((id) => MONSTER_MAP[id].name).join(', ');
-      c.add(makeText(this, W / 2, H / 2 + 6, `¡Nuevo monstruo en el álbum: ${names}!`, 16, '#2f9e44', false));
+      c.add(makeText(this, W / 2, H / 2 + 58, `¡Nuevo en el álbum: ${names}!`, 15, '#2f9e44', false));
     }
 
+    // Botones 3D jugosos con iconos
     const isLast = this.level.id >= 30;
-    const next = makeButton(this, W / 2, H / 2 + 80, 280, 60, isLast ? 'VER NIVELES' : 'SIGUIENTE ▶', {
-      fontSize: 24,
-      onClick: () => {
-        if (isLast) this.scene.start('levels');
-        else this.scene.restart({ levelId: this.level.id + 1 });
-      },
+    this.juicyButton(c, W / 2, H / 2 + 116, 0xd66200, 0xff9500, isLast ? 'VER NIVELES' : 'SIGUIENTE', 'play', () => {
+      if (isLast) this.scene.start('levels');
+      else this.scene.restart({ levelId: this.level.id + 1 });
     });
-    const repeat = makeButton(this, W / 2, H / 2 + 152, 280, 54, 'REPETIR', {
-      bg: COLORS.mintDark, fontSize: 20,
-      onClick: () => this.scene.restart({ levelId: this.level.id }),
+    this.juicyButton(c, W / 2, H / 2 + 186, 0x1a9c9c, 0x45d1c9, 'REPETIR', 'redo', () => {
+      this.scene.restart({ levelId: this.level.id });
     });
-    const menu = makeButton(this, W / 2, H / 2 + 220, 280, 54, 'NIVELES', {
-      bg: COLORS.purple, fontSize: 20,
-      onClick: () => this.scene.start('levels'),
+    this.juicyButton(c, W / 2, H / 2 + 250, 0x8c5ac8, 0xc495f0, 'NIVELES', 'home', () => {
+      this.scene.start('levels');
     });
-    c.add([next, repeat, menu]);
+
+    // Confeti de iconos kawaii cayendo con giro
+    for (let i = 0; i < 36; i++) {
+      const tex = ['sparkle', 'heart', 'star', 'coin'][i % 4];
+      const conf = this.add.image(Math.random() * W, -30 - Math.random() * 240, tex)
+        .setDepth(101).setScale(0.4 + Math.random() * 0.7);
+      this.tweens.add({
+        targets: conf, y: H + 40, x: conf.x + (Math.random() - 0.5) * 140,
+        angle: (Math.random() - 0.5) * 720, duration: 1600 + Math.random() * 1600,
+        delay: Math.random() * 700, onComplete: () => conf.destroy(),
+      });
+    }
+  }
+
+  /** Explosión radial de brillos al ganar cada estrella. */
+  private starBurst(x: number, y: number): void {
+    for (let i = 0; i < 10; i++) {
+      const p = this.add.image(x, y, 'sparkle').setDepth(102).setScale(0.5 + Math.random() * 0.6);
+      const a = (i / 10) * Math.PI * 2;
+      this.tweens.add({
+        targets: p, x: x + Math.cos(a) * 74, y: y + Math.sin(a) * 74, alpha: 0, scale: 0.2,
+        duration: 520, onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  /** Botón 3D jugoso (base oscura, cara clara, brillo gelatina) con icono. */
+  private juicyButton(
+    c: Phaser.GameObjects.Container, x: number, y: number,
+    dark: number, light: number, label: string,
+    icon: 'play' | 'redo' | 'home', onClick: () => void
+  ): void {
+    const w = 280; const h = 56; const r = 28;
+    const g = this.add.graphics();
+    g.fillStyle(0x6d3a14, 1);
+    g.fillRoundedRect(x - w / 2, y - h / 2 + 5, w, h, r);
+    g.fillStyle(dark, 1);
+    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, r);
+    g.fillStyle(light, 1);
+    g.fillRoundedRect(x - w / 2, y - h / 2, w, h - 8, r);
+    g.fillStyle(0xffffff, 0.3);
+    g.fillRoundedRect(x - w / 2 + 10, y - h / 2 + 4, w - 20, 12, 6);
+    g.lineStyle(3, 0x6d3a14, 1);
+    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, r);
+    if (icon === 'play') {
+      g.fillStyle(0xffffff, 1);
+      g.lineStyle(3, 0x6d3a14, 1);
+      g.beginPath();
+      g.moveTo(x - 96, y - 12); g.lineTo(x - 76, y); g.lineTo(x - 96, y + 12);
+      g.closePath(); g.fillPath(); g.strokePath();
+    } else if (icon === 'redo') {
+      g.lineStyle(5, 0xffffff, 1);
+      g.beginPath();
+      g.arc(x - 86, y - 2, 10, Phaser.Math.DegToRad(45), Phaser.Math.DegToRad(315), false);
+      g.strokePath();
+      g.fillStyle(0xffffff, 1);
+      g.fillTriangle(x - 86, y - 17, x - 76, y - 12, x - 81, y - 2);
+    } else {
+      g.fillStyle(0xffffff, 1);
+      g.lineStyle(3, 0x4a296d, 1);
+      g.fillTriangle(x - 86, y - 14, x - 98, y - 3, x - 74, y - 3);
+      g.fillRect(x - 94, y - 3, 15, 12);
+    }
+    const t = this.add.text(x + 12, y - 4, label, {
+      fontFamily: 'Arial Black, sans-serif', fontSize: '22px', color: '#ffffff',
+      stroke: '#6D3A14', strokeThickness: 5,
+    }).setOrigin(0.5);
+    const zone = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
+    const bc = this.add.container(0, 0, [g, t, zone]);
+    zone.on('pointerdown', () => {
+      audio.click();
+      this.tweens.add({ targets: bc, y: 4, duration: 60 });
+    });
+    zone.on('pointerup', () => {
+      this.tweens.add({ targets: bc, y: 0, duration: 180, ease: 'Back.easeOut' });
+      onClick();
+    });
+    zone.on('pointerout', () => this.tweens.add({ targets: bc, y: 0, duration: 120 }));
+    c.add(bc);
+  }
+}
+
+/** Estrella gordita con contorno grueso y brillo interior. */
+function drawChunkyStar(g: Phaser.GameObjects.Graphics, filled: boolean): void {
+  g.lineStyle(10, 0x6d3a14, 1);
+  g.fillStyle(filled ? 0xffd700 : 0xbdb2a1, 1);
+  g.beginPath();
+  g.moveTo(0, -35); g.lineTo(12, -12); g.lineTo(38, -10); g.lineTo(18, 8); g.lineTo(25, 33);
+  g.lineTo(0, 18); g.lineTo(-25, 33); g.lineTo(-18, 8); g.lineTo(-38, -10); g.lineTo(-12, -12);
+  g.closePath();
+  g.fillPath();
+  g.strokePath();
+  if (filled) {
+    g.lineStyle(4, 0xffeca3, 0.8);
+    g.beginPath();
+    g.moveTo(0, -25); g.lineTo(8, -8); g.lineTo(28, -6);
+    g.strokePath();
   }
 }

@@ -98,3 +98,27 @@ una tarjeta visual. Después queda registrada en el álbum.
   - piso equivocado: se perdonan 2 movimientos en el cálculo de estrellas;
   - enemigos juntos o pareja separada: no suma `ruleBreaks`/`separations` esa vez.
   Las siguientes equivocaciones sí penalizan normal.
+
+## Diálogos de Rese (lectura paso a paso)
+
+- El texto aparece **letra a letra** (máquina de escribir) dentro de un **rectángulo de diálogo abajo**.
+- La voz de Rese se **pausa al terminar cada frase** y aparece **«haz clic para continuar ▶»**
+  abajo a la derecha: nada avanza sin el clic del niño (primera lectura completa garantizada).
+- Un clic con la frase a medias la completa al instante; el siguiente clic pasa a la siguiente línea.
+- Botón SALTAR ▶ arriba a la derecha para quien ya se sabe la lección.
+
+## Economía de vidas y monetización
+
+- Niveles 15+: **3 corazones globales** (compartidos entre niveles, no por intento).
+- Cada piso equivocado gasta 1 corazón global.
+- Con 0 corazones **no se reintenta el nivel**: aparece el panel «¡SIN CORAZONES!» con:
+  1. **Espera de 25 min** (temporizador real en pantalla; al cumplirse vuelven los 3).
+  2. **Ver anuncio (+3 ❤)**: interstitial de recompensa de 12 s. En esta versión web es una
+     promoción animada del propio juego (sin redes externas, seguro para niños); en la
+     versión de tienda ese slot se conecta a AdMob/AdSense.
+  3. **Premium 19,99 Bs / mes**: corazones infinitos y sin anuncios. El cobro real se activa
+     en la versión de tienda (Play Store/APK); aquí existe un botón demo sin cobro para probarlo.
+- Recomendación de monetización del equipo: **sin anuncios obligatorios ni cajas de suerte**;
+  ingreso principal = pack premium único o mensual barato (19,99 Bs) + anuncios *opt-in*
+  (solo quien quiere vidas extra). Es el modelo aceptado por políticas de apps infantiles.
+- El temporizador de espera y el premium se guardan en el save (resisten cerrar el juego).

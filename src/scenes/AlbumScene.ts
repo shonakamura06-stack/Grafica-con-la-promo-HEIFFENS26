@@ -16,6 +16,7 @@ export default class AlbumScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.cameras.main.fadeIn(320);
     const save = loadSave();
     const W = this.scale.width;
     const H = this.scale.height;

@@ -16,6 +16,7 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.cameras.main.fadeIn(320);
     const save = loadSave();
     audio.ensure();
     this.input.once('pointerdown', () => {

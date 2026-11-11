@@ -243,74 +243,98 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
   },
   // Rufi: naranja peludo con pecas, cola rizada y dientes de conejo
   rufi(g, mood) {
-    g.fillStyle(0xfb923c, 1);
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      g.fillCircle(C + Math.cos(a) * 36, 68 + Math.sin(a) * 36, 13);
+    // Alien rocoso: pinchos en el lomo, cuernos, tercer ojo y cola con maza
+    g.fillStyle(0xc2410c, 1);
+    g.fillRoundedRect(C + 28, 84, 24, 10, 5);
+    g.fillCircle(C + 52, 89, 10);
+    outlineCircle(g, C + 52, 89, 10);
+    g.fillStyle(0x7c2d12, 1);
+    g.fillTriangle(C + 48, 80, C + 52, 71, C + 56, 80);
+    g.fillTriangle(C + 58, 83, C + 66, 80, C + 60, 90);
+    // Pinchos del lomo (detrás del cuerpo)
+    g.fillStyle(0x7c2d12, 1);
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI * (1.16 + i * 0.17);
+      const x = C + Math.cos(a) * 33;
+      const y = 66 + Math.sin(a) * 33;
+      g.fillTriangle(x - 7, y + 5, x + 7, y + 5, x + Math.cos(a) * 17, y + Math.sin(a) * 17);
     }
-    g.fillCircle(C, 68, 38);
-    outlineCircle(g, C, 68, 38);
-    // Cola rizada
+    // Cuerpo y placa abdominal
     g.fillStyle(0xfb923c, 1);
-    g.fillCircle(C + 48, 92, 10);
-    outlineCircle(g, C + 48, 92, 10);
-    g.fillStyle(0xea580c, 1);
-    g.fillCircle(C - 30, 34, 15);
-    g.fillCircle(C + 30, 34, 15);
-    outlineCircle(g, C - 30, 34, 15);
-    outlineCircle(g, C + 30, 34, 15);
-    g.fillStyle(0xfbcfe8, 1);
-    g.fillCircle(C - 30, 34, 8);
-    g.fillCircle(C + 30, 34, 8);
+    g.fillCircle(C, 68, 36);
+    outlineCircle(g, C, 68, 36);
+    g.fillStyle(0xfed7aa, 1);
+    g.fillEllipse(C, 82, 40, 28);
+    // Cuernos
+    g.fillStyle(0xfde68a, 1);
+    g.fillTriangle(C - 26, 40, C - 35, 17, C - 13, 34);
+    g.fillTriangle(C + 26, 40, C + 35, 17, C + 13, 34);
+    // Tercer ojo frontal
+    eye(g, C, 45, 6, 3);
     eye(g, C - 14, 60, 11, 6);
     eye(g, C + 14, 60, 11, 6);
     if (mood === 'angry') angryBrows(g, C, 60, 14);
-    g.fillStyle(0x7c2d12, 1);
-    g.fillEllipse(C, 76, 18, 13);
+    // Sonrisa con colmillos
     if (mood === 'happy') {
+      g.fillStyle(0x7c2d12, 1);
+      g.fillEllipse(C, 78, 22, 14);
       g.fillStyle(0xffffff, 1);
-      g.fillRoundedRect(C - 10, 84, 20, 13, 3);
-      g.lineStyle(2, 0x7c2d12, 1);
-      g.lineBetween(C, 84, C, 97);
+      g.fillTriangle(C - 9, 72, C - 3, 72, C - 6, 79);
+      g.fillTriangle(C + 3, 72, C + 9, 72, C + 6, 79);
+      g.fillTriangle(C - 6, 84, C, 84, C - 3, 78);
+      g.fillTriangle(C + 2, 84, C + 8, 84, C + 5, 78);
     } else {
-      mouth(g, mood, C, 86, 10, 0x7c2d12);
+      mouth(g, mood, C, 80, 10, 0x7c2d12);
     }
-    // Pecas
-    g.fillStyle(0xc2410c, 1);
-    g.fillCircle(C - 24, 74, 2.2);
-    g.fillCircle(C - 19, 78, 2.2);
-    g.fillCircle(C + 24, 74, 2.2);
-    g.fillCircle(C + 19, 78, 2.2);
-    cheeks(g, C, 78, 26);
+    cheeks(g, C, 76, 28);
   },
   // Glup: turquesa acuático con mechón de algas y aletas
   glup(g, mood) {
+    // Alien abisal: linterna luminosa, tercer ojo y barba de tentáculos
+    g.lineStyle(7, 0x0f766e, 1);
+    for (let i = 0; i < 4; i++) {
+      const x = C - 21 + i * 14;
+      g.beginPath();
+      g.moveTo(x, 94);
+      g.lineTo(x - 4, 106);
+      g.lineTo(x + 3, 116);
+      g.strokePath();
+    }
     g.fillStyle(0x2dd4bf, 1);
-    g.fillEllipse(C, 72, 78, 88);
-    outlineEllipse(g, C, 72, 78, 88);
-    g.fillTriangle(C - 8, 30, C + 16, 30, C + 4, 8);
-    g.fillTriangle(C - 38, 66, C - 56, 78, C - 36, 84);
-    g.fillTriangle(C + 38, 66, C + 56, 78, C + 36, 84);
+    g.fillEllipse(C, 70, 76, 84);
+    outlineEllipse(g, C, 70, 76, 84);
     g.fillStyle(0x99f6e4, 1);
-    g.fillEllipse(C, 84, 48, 52);
-    // Mechón de algas
-    g.lineStyle(4, 0x16a34a, 1);
-    g.beginPath(); g.moveTo(C - 6, 30); g.lineTo(C - 10, 16); g.strokePath();
-    g.beginPath(); g.moveTo(C + 4, 30); g.lineTo(C + 8, 14); g.strokePath();
-    eye(g, C - 14, 60, 12, 6.5);
-    eye(g, C + 14, 60, 12, 6.5);
-    if (mood === 'angry') angryBrows(g, C, 60, 14);
+    g.fillEllipse(C, 84, 44, 42);
+    // Linterna (antena con orbe luminoso)
+    g.lineStyle(4, 0x0f766e, 1);
+    g.beginPath(); g.moveTo(C, 30); g.lineTo(C - 6, 15); g.strokePath();
+    g.fillStyle(0xfacc15, 1);
+    g.fillCircle(C - 7, 12, 7);
+    g.lineStyle(2, 0xffffff, 0.9);
+    g.strokeCircle(C - 7, 12, 10);
+    // Tres ojos
+    eye(g, C - 15, 58, 12, 6.5);
+    eye(g, C + 15, 58, 12, 6.5);
+    eye(g, C, 46, 6, 3);
+    if (mood === 'angry') angryBrows(g, C, 58, 14);
+    // Boca con colmillos
     if (mood === 'happy') {
       g.fillStyle(0x134e4a, 1);
-      g.fillEllipse(C, 82, 13, 15);
+      g.fillEllipse(C, 78, 24, 14);
+      g.fillStyle(0xffffff, 1);
+      g.fillTriangle(C - 10, 72, C - 4, 72, C - 7, 79);
+      g.fillTriangle(C + 4, 72, C + 10, 72, C + 7, 79);
     } else {
-      mouth(g, mood, C, 82, 10, 0x134e4a);
+      mouth(g, mood, C, 80, 10, 0x134e4a);
     }
-    g.lineStyle(3, 0xffffff, 0.9);
-    g.strokeCircle(C + 34, 34, 8);
-    g.strokeCircle(C + 44, 20, 5.5);
-    g.strokeCircle(C + 28, 18, 4);
-    cheeks(g, C, 80, 26);
+    // Antenas laterales con bolitas
+    g.lineStyle(3, 0x0f766e, 1);
+    g.beginPath(); g.moveTo(C - 36, 52); g.lineTo(C - 48, 44); g.strokePath();
+    g.beginPath(); g.moveTo(C + 36, 52); g.lineTo(C + 48, 44); g.strokePath();
+    g.fillStyle(0xf472b6, 1);
+    g.fillCircle(C - 50, 42, 4);
+    g.fillCircle(C + 50, 42, 4);
+    cheeks(g, C, 76, 28);
   },
   // Sombrín: azul oscuro tímido con gorro de luna, manta y estrellitas
   sombrin(g, mood) {
