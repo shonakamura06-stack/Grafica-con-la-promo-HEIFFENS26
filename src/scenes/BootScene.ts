@@ -459,6 +459,141 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillEllipse(C - 40, 76, 16, 10);
     g.fillEllipse(C + 40, 76, 16, 10);
   },
+  // Turista: monstruo azul con sombrero de sol y cámara
+  turista(g, mood) {
+    g.fillStyle(0x38bdf8, 1);
+    g.fillEllipse(C, 72, 88, 84);
+    outlineEllipse(g, C, 72, 88, 84);
+    // Sombrero de sol
+    g.fillStyle(0xfde68a, 1);
+    g.fillEllipse(C, 40, 84, 20);
+    g.fillStyle(0xf59e0b, 1);
+    g.fillEllipse(C, 34, 48, 22);
+    g.fillStyle(0xef4444, 1);
+    g.fillRect(C - 24, 30, 48, 8);
+    eye(g, C - 13, 62, 10, 5.5);
+    eye(g, C + 13, 62, 10, 5.5);
+    if (mood === 'angry') angryBrows(g, C, 62, 13);
+    mouth(g, mood, C, 76, 12);
+    cheeks(g, C, 78, 26);
+    // Cámara colgando
+    g.lineStyle(3, 0x7c4f24, 1);
+    g.lineBetween(C - 20, 52, C - 8, 88);
+    g.lineBetween(C + 20, 52, C + 8, 88);
+    g.fillStyle(0x475569, 1);
+    g.fillRoundedRect(C - 14, 86, 28, 20, 4);
+    g.fillStyle(0x93c5fd, 1);
+    g.fillCircle(C, 96, 6);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(C, 96, 3);
+  },
+  // Señor VIP: monstruo dorado con gafas de sol y cadena de oro
+  vip(g, mood) {
+    g.fillStyle(0xf59e0b, 1);
+    g.fillEllipse(C, 72, 92, 84);
+    outlineEllipse(g, C, 72, 92, 84);
+    // Cuernitos dorados
+    g.fillStyle(0xfde68a, 1);
+    g.fillTriangle(C - 30, 36, C - 40, 16, C - 20, 28);
+    g.fillTriangle(C + 30, 36, C + 40, 16, C + 20, 28);
+    // Gafas de sol
+    g.fillStyle(0x1e293b, 1);
+    g.fillRoundedRect(C - 28, 54, 24, 16, 6);
+    g.fillRoundedRect(C + 4, 54, 24, 16, 6);
+    g.fillRect(C - 4, 58, 8, 4);
+    g.fillStyle(0xffffff, 0.5);
+    g.fillRect(C - 24, 57, 8, 4);
+    g.fillRect(C + 8, 57, 8, 4);
+    mouth(g, mood, C, 82, 12);
+    // Cadena de oro con medallón
+    g.lineStyle(4, 0xffd678, 1);
+    g.beginPath(); g.arc(C, 78, 22, Math.PI * 0.2, Math.PI * 0.8, false); g.strokePath();
+    g.fillStyle(0xffd678, 1);
+    g.fillCircle(C, 100, 7);
+    g.fillStyle(0xf59e0b, 1);
+    g.fillCircle(C, 100, 4);
+    cheeks(g, C, 78, 30);
+  },
+  // Maletero: monstruo rojo fuerte con maletas
+  maletero(g, mood) {
+    g.fillStyle(0xef4444, 1);
+    g.fillEllipse(C, 72, 96, 88);
+    outlineEllipse(g, C, 72, 96, 88);
+    // Brazos fuertes
+    g.fillStyle(0xef4444, 1);
+    g.fillCircle(C - 52, 78, 14);
+    g.fillCircle(C + 52, 78, 14);
+    outlineCircle(g, C - 52, 78, 14);
+    outlineCircle(g, C + 52, 78, 14);
+    eye(g, C - 14, 58, 11, 6);
+    eye(g, C + 14, 58, 11, 6);
+    if (mood === 'angry') angryBrows(g, C, 58, 14);
+    mouth(g, mood, C, 74, 13);
+    cheeks(g, C, 76, 30);
+    // Maletas a los lados
+    g.fillStyle(0x7c4f24, 1);
+    g.fillRoundedRect(C - 62, 88, 20, 26, 4);
+    g.fillRoundedRect(C + 42, 88, 20, 26, 4);
+    g.fillStyle(0xa06a35, 1);
+    g.fillRoundedRect(C - 62, 88, 20, 8, 4);
+    g.fillRoundedRect(C + 42, 88, 20, 8, 4);
+    g.fillStyle(0xffffff, 1);
+    g.fillRect(C - 56, 100, 8, 4);
+    g.fillRect(C + 48, 100, 8, 4);
+  },
+  // Enamorado: monstruo rosa con ojos de corazón
+  enamorado(g, mood) {
+    g.fillStyle(0xf472b6, 1);
+    g.fillEllipse(C, 72, 90, 86);
+    outlineEllipse(g, C, 72, 90, 86);
+    // Antenas con corazones
+    g.lineStyle(3, 0xbe185d, 1);
+    g.lineBetween(C - 24, 38, C - 30, 20);
+    g.lineBetween(C + 24, 38, C + 30, 20);
+    g.fillStyle(0xef4444, 1);
+    g.fillCircle(C - 30, 16, 7);
+    g.fillCircle(C - 25, 13, 5);
+    g.fillCircle(C + 30, 16, 7);
+    g.fillCircle(C + 25, 13, 5);
+    g.fillTriangle(C - 36, 18, C - 24, 18, C - 30, 28);
+    g.fillTriangle(C + 24, 18, C + 36, 18, C + 30, 28);
+    // Ojos de corazón
+    g.fillStyle(0xef4444, 1);
+    g.fillCircle(C - 14, 58, 6);
+    g.fillCircle(C - 9, 55, 4);
+    g.fillCircle(C + 14, 58, 6);
+    g.fillCircle(C + 9, 55, 4);
+    g.fillTriangle(C - 20, 60, C - 8, 60, C - 14, 70);
+    g.fillTriangle(C + 8, 60, C + 20, 60, C + 14, 70);
+    if (mood === 'angry') angryBrows(g, C, 58, 14);
+    mouth(g, mood, C, 78, 12, 0x9f1239);
+    cheeks(g, C, 80, 28);
+  },
+  // Gruñón: monstruo gris con cejas gruesas y colmillos
+  grunon(g, mood) {
+    g.fillStyle(0x78716c, 1);
+    g.fillEllipse(C, 72, 94, 86);
+    outlineEllipse(g, C, 72, 94, 86);
+    // Cuernos gruesos
+    g.fillStyle(0x44403c, 1);
+    g.fillTriangle(C - 34, 40, C - 46, 14, C - 22, 30);
+    g.fillTriangle(C + 34, 40, C + 46, 14, C + 22, 30);
+    eye(g, C - 14, 60, 11, 6);
+    eye(g, C + 14, 60, 11, 6);
+    // Cejas siempre fruncidas (gruñón)
+    angryBrows(g, C, 60, 14);
+    if (mood === 'happy') {
+      g.lineStyle(3, 0x44403c, 1);
+      g.beginPath(); g.arc(C, 76, 10, Math.PI * 0.15, Math.PI * 0.85, false); g.strokePath();
+    } else {
+      mouth(g, mood, C, 78, 11, 0x44403c);
+    }
+    // Colmillos
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(C - 10, 84, C - 4, 84, C - 7, 92);
+    g.fillTriangle(C + 4, 84, C + 10, 84, C + 7, 92);
+    cheeks(g, C, 80, 30);
+  },
 };
 
 export default class BootScene extends Phaser.Scene {
@@ -479,6 +614,49 @@ export default class BootScene extends Phaser.Scene {
       }
     }
 
+    // Recepcionista Rese: monigote con uniforme, pajarita e identificación
+    {
+      const g = this.add.graphics();
+      // Cuerpo con uniforme azul de recepcionista
+      g.fillStyle(0x3b82f6, 1);
+      g.fillRoundedRect(C - 26, 52, 52, 62, 12);
+      outlineEllipse(g, C, 82, 52, 62);
+      // Camisa blanca
+      g.fillStyle(0xffffff, 1);
+      g.fillTriangle(C - 12, 54, C + 12, 54, C, 74);
+      // Pajarita roja
+      g.fillStyle(0xef4444, 1);
+      g.fillTriangle(C - 2, 58, C - 14, 52, C - 14, 64);
+      g.fillTriangle(C + 2, 58, C + 14, 52, C + 14, 64);
+      g.fillCircle(C, 58, 4);
+      // Identificación (placa dorada)
+      g.fillStyle(0xffd678, 1);
+      g.fillRoundedRect(C + 8, 76, 14, 10, 2);
+      g.fillStyle(0x1e293b, 1);
+      g.fillRect(C + 10, 79, 10, 2);
+      // Cabeza
+      g.fillStyle(0xfde68a, 1);
+      g.fillCircle(C, 34, 24);
+      outlineCircle(g, C, 34, 24);
+      // Gorro de recepcionista
+      g.fillStyle(0x1e3a8a, 1);
+      g.fillEllipse(C, 16, 40, 14);
+      g.fillStyle(0xffd678, 1);
+      g.fillEllipse(C, 20, 42, 6);
+      eye(g, C - 9, 36, 7, 4);
+      eye(g, C + 9, 36, 7, 4);
+      mouth(g, 'happy', C, 46, 8);
+      cheeks(g, C, 46, 16);
+      // Brazos saludando
+      g.lineStyle(6, 0x3b82f6, 1);
+      g.beginPath(); g.moveTo(C - 24, 62); g.lineTo(C - 36, 48); g.strokePath();
+      g.beginPath(); g.moveTo(C + 24, 62); g.lineTo(C + 36, 48); g.strokePath();
+      g.fillStyle(0xfde68a, 1);
+      g.fillCircle(C - 37, 46, 6);
+      g.fillCircle(C + 37, 46, 6);
+      g.generateTexture('rese', T, T);
+      g.destroy();
+    }
     // Nube con carita (decoración del cielo)
     {
       const g = this.add.graphics();

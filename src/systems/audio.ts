@@ -107,6 +107,21 @@ class AudioEngine {
     this.sweep(370, 349, 0.22, 'sawtooth', 0.22, 0.2);
     this.sweep(349, 311, 0.4, 'sawtooth', 0.25, 0.4);
   }
+  /** Tensión: pulso rápido cuando queda poco tiempo. */
+  tension(): void {
+    this.tone(880, 0.09, 'square', 0.2);
+    this.tone(880, 0.09, 'square', 0.2, 0.12);
+    this.tone(1108, 0.14, 'square', 0.22, 0.24);
+  }
+  /** Avería: chispazo descendente. */
+  breakdown(): void {
+    this.sweep(600, 120, 0.4, 'sawtooth', 0.25);
+    this.tone(200, 0.2, 'square', 0.2, 0.1);
+  }
+  /** Engranaje al girar. */
+  gear(): void { this.tone(440, 0.06, 'triangle', 0.3); }
+  /** Reparación completa: fanfarria corta. */
+  repaired(): void { [523, 659, 784].forEach((f, i) => this.tone(f, 0.15, 'triangle', 0.4, i * 0.08)); }
   /** Los monstruos se bajan molestos: bufido descendente. */
   grumpy(): void {
     this.sweep(300, 180, 0.3, 'square', 0.18);

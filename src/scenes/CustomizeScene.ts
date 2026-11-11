@@ -13,6 +13,9 @@ const CATEGORIES: Array<{ key: keyof Customization; title: string }> = [
   { key: 'wallpaper', title: 'PAPEL DE PARED' },
   { key: 'carpet', title: 'ALFOMBRA' },
   { key: 'door', title: 'PUERTAS DEL ASCENSOR' },
+  { key: 'rese', title: 'UNIFORME DE RESE' },
+  { key: 'elevator', title: 'COLOR DEL ASCENSOR' },
+  { key: 'night', title: 'MODO DÍA / NOCHE' },
 ];
 
 export default class CustomizeScene extends Phaser.Scene {
@@ -43,18 +46,18 @@ export default class CustomizeScene extends Phaser.Scene {
     makeText(this, W / 2, 40, 'MI HOTEL', 28, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.35)', 3, true, true);
     makeCoins(this, W - 70, 40, loadSave().coins);
 
-    let y = 120;
+    let y = 110;
     for (const cat of CATEGORIES) {
-      makeText(this, W / 2, y, cat.title, 20, '#a06a35');
-      y += 44;
+      makeText(this, W / 2, y, cat.title, 17, '#a06a35');
+      y += 34;
       const options = CUSTOM_OPTIONS[cat.key];
       const rowW = 460;
       const startX = W / 2 - rowW / 2 + 55;
       options.forEach((opt, i) => {
         const x = startX + i * 115;
-        this.renderOption(cat.key, opt.id, opt.name, opt.color, opt.price, x, y + 40);
+        this.renderOption(cat.key, opt.id, opt.name, opt.color, opt.price, x, y + 28);
       });
-      y += 130;
+      y += 104;
     }
 
     makeText(this, W / 2, H - 40, 'Gana monedas completando niveles con estrellas', 15, '#a06a35', false);

@@ -4,9 +4,10 @@
  * La distancia recorrida por el ascensor determina las estrellas.
  * El recorrido óptimo se calcula con el algoritmo de Dijkstra sobre el
  * estado completo de la partida (entregados, a bordo, posición), teniendo
- * en cuenta la capacidad, los gigantes, los gemelos, los tímidos y los
- * fantasmas. Así las estrellas siempre se comparan contra un óptimo real,
- * nunca contra límites arbitrarios.
+ * en cuenta la capacidad, los gigantes, los gemelos, los tímidos, los
+ * fantasmas, las PAREJAS (deben salir juntas) y los ENEMIGOS (no pueden
+ * viajar juntos). Así las estrellas siempre se comparan contra un óptimo
+ * real, nunca contra límites arbitrarios.
  */
 
 import { LevelDef } from '../data/levels';
@@ -21,18 +22,34 @@ interface PassengerInfo {
   slots: number;
   rule: string;
   twinPair: number; // índice del gemelo pareja, o -1
+  couplePair: number; // índice de la pareja enamorada, o -1
+  enemies: number[]; // índices de enemigos (no pueden viajar juntos)
 }
 
 function buildInfos(level: LevelDef): PassengerInfo[] {
   const infos: PassengerInfo[] = level.passengers.map((p) => {
     const def = MONSTER_MAP[p.m];
-    return { dest: p.d, slots: def.slots, rule: def.rule, twinPair: -1 };
+    return { dest: p.d, slots: def.slots, rule: def.rule, twinPair: -1, couplePair: -1, enemies: [] };
   });
   // Emparejar gemelos: cada gemelo conoce a su pareja.
   const twinIdx = infos.map((inf, i) => (inf.rule === 'twins' ? i : -1)).filter((i) => i >= 0);
   for (let k = 0; k + 1 < twinIdx.length; k += 2) {
     infos[twinIdx[k]].twinPair = twinIdx[k + 1];
     infos[twinIdx[k + 1]].twinPair = twinIdx[k];
+  }
+  // Parejas enamoradas: deben salir juntas del ascensor.
+  for (const [a, b] of level.couples) {
+    if (infos[a] && infos[b]) {
+      infos[a].couplePair = b;
+      infos[b].couplePair = a;
+    }
+  }
+  // Enemigos: no pueden estar a bordo a la vez.
+  for (const [a, b] of level.enemies) {
+    if (infos[a] && infos[b]) {
+      infos[a].enemies.push(b);
+      infos[b].enemies.push(a);
+    }
   }
   return infos;
 }
@@ -59,6 +76,10 @@ function canBoard(i: number, onboard: number, infos: PassengerInfo[], capacity: 
   if (inf.rule === 'shy' && onboard !== 0) return false;
   // Si hay un tímido a bordo, nadie más puede subir.
   if (hasShy(onboard, infos)) return false;
+  // Enemigos: no puede subir si su enemigo está a bordo.
+  for (const e of inf.enemies) {
+    if (onboard & (1 << e)) return false;
+  }
   // Gemelos: suben en pareja (se comprueba el coste conjunto).
   let extra = inf.slots;
   if (inf.rule === 'twins' && inf.twinPair >= 0) extra += infos[inf.twinPair].slots;
@@ -156,6 +177,8 @@ export function computeOptimal(level: LevelDef): SolveResult {
       let nonboard = onboard;
       for (let i = 0; i < n; i++) {
         if ((onboard & (1 << i)) && infos[i].dest === f) {
+          // Parejas: solo salen si AMBOS están a bordo (si no, se quedan).
+          if (infos[i].couplePair >= 0 && !(onboard & (1 << infos[i].couplePair))) continue;
           ndelivered |= 1 << i;
           nonboard &= ~(1 << i);
         }
@@ -168,11 +191,15 @@ export function computeOptimal(level: LevelDef): SolveResult {
   return { optimal: Number.MAX_SAFE_INTEGER };
 }
 
-/** Umbrales de estrellas a partir del óptimo (siempre alcanzables y claros). */
+/**
+ * Umbrales de estrellas por eficiencia:
+ * - 3 estrellas: distancia ≤ óptima + 1 (¡casi perfecto!).
+ * - 2 estrellas: distancia ≤ óptima + 3.
+ * - 1 estrella: completar el nivel (cualquier distancia mayor).
+ * La solución perfecta (distancia == óptima) da bonus de monedas.
+ */
 export function starThresholds(optimal: number): { three: number; two: number } {
-  const three = optimal + Math.max(2, Math.round(optimal * 0.2));
-  const two = optimal + Math.max(4, Math.round(optimal * 0.6));
-  return { three, two };
+  return { three: optimal + 1, two: optimal + 3 };
 }
 
 export function starsFor(distance: number, optimal: number): number {
@@ -182,8 +209,14 @@ export function starsFor(distance: number, optimal: number): number {
   return 1;
 }
 
-export function coinsFor(stars: number): number {
-  return 6 + stars * 4;
+/** ¿La solución fue perfecta (sin movimientos de más)? */
+export function isPerfect(distance: number, optimal: number): boolean {
+  return distance === optimal;
+}
+
+export function coinsFor(stars: number, perfect = false): number {
+  const base = 6 + stars * 4;
+  return perfect ? base + 10 : base;
 }
 
 /**

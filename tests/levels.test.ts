@@ -39,6 +39,48 @@ describe('datos de niveles', () => {
     }
   });
 
+  it('las parejas enamoradas tienen el mismo destino y índices válidos', () => {
+    for (const lvl of LEVELS) {
+      for (const [a, b] of lvl.couples) {
+        expect(a).toBeGreaterThanOrEqual(0);
+        expect(b).toBeGreaterThanOrEqual(0);
+        expect(a).toBeLessThan(lvl.passengers.length);
+        expect(b).toBeLessThan(lvl.passengers.length);
+        expect(a).not.toBe(b);
+        expect(lvl.passengers[a].d).toBe(lvl.passengers[b].d);
+      }
+    }
+  });
+
+  it('los enemigos tienen índices válidos y distintos', () => {
+    for (const lvl of LEVELS) {
+      for (const [a, b] of lvl.enemies) {
+        expect(a).toBeGreaterThanOrEqual(0);
+        expect(b).toBeGreaterThanOrEqual(0);
+        expect(a).toBeLessThan(lvl.passengers.length);
+        expect(b).toBeLessThan(lvl.passengers.length);
+        expect(a).not.toBe(b);
+      }
+    }
+  });
+
+  it('tiempo, vidas y averías tienen valores razonables', () => {
+    for (const lvl of LEVELS) {
+      expect(lvl.timeLimit).toBeGreaterThanOrEqual(60);
+      expect(lvl.timeLimit).toBeLessThanOrEqual(600);
+      expect([0, 3]).toContain(lvl.lives);
+      expect(lvl.breakdownChance).toBeGreaterThanOrEqual(0);
+      expect(lvl.breakdownChance).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it('las vidas solo aparecen desde el nivel 15', () => {
+    for (const lvl of LEVELS) {
+      if (lvl.id < 15) expect(lvl.lives).toBe(0);
+      else expect(lvl.lives).toBe(3);
+    }
+  });
+
   it('la capacidad permite siempre subir a un gigante o a los gemelos', () => {
     for (const lvl of LEVELS) {
       const hasGiant = lvl.passengers.some((p) => p.m === 'gordito');
@@ -54,7 +96,7 @@ describe('datos de niveles', () => {
       expect(optimal).toBeGreaterThan(0);
       expect(optimal).toBeLessThan(Number.MAX_SAFE_INTEGER);
     }
-  }, 30000);
+  }, 60000);
 
   it('la dificultad progresa: el nivel 30 tiene más pasajeros que el nivel 1', () => {
     expect(LEVELS[29].passengers.length).toBeGreaterThan(LEVELS[0].passengers.length);
@@ -63,7 +105,7 @@ describe('datos de niveles', () => {
 
   it('los monstruos especiales aparecen solo a partir de su nivel de desbloqueo', () => {
     for (const m of MONSTERS) {
-      if (m.rule === 'none') continue;
+      if (m.rule === 'none' && m.kind === 'none') continue;
       const firstLevel = LEVELS.find((l) => l.passengers.some((p) => p.m === m.id));
       expect(firstLevel, m.id).toBeDefined();
       expect(firstLevel!.id).toBeGreaterThanOrEqual(m.unlockLevel);

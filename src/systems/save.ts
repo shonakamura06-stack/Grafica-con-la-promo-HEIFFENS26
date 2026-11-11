@@ -14,6 +14,9 @@ export interface Customization {
   wallpaper: string;  // id de opción de papel de pared
   carpet: string;     // id de opción de alfombra
   door: string;       // id de opción de puertas del ascensor
+  rese: string;       // id de skin del recepcionista
+  elevator: string;   // id de skin del ascensor
+  night: string;      // 'dia' | 'noche'
 }
 
 export interface SaveData {
@@ -38,7 +41,7 @@ export function defaultSave(): SaveData {
     stars: {},
     coins: 0,
     monstersUnlocked: ['bubu', 'chispa'],
-    custom: { wallpaper: 'crema', carpet: 'roja', door: 'dorado' },
+    custom: { wallpaper: 'crema', carpet: 'roja', door: 'dorado', rese: 'azul', elevator: 'naranja', night: 'dia' },
     owned: {},
     settings: { sound: true, music: true, vibration: true },
     seenTutorials: [],
@@ -116,6 +119,22 @@ export const CUSTOM_OPTIONS: Record<keyof Customization, CustomOption[]> = {
     { id: 'plateado', name: 'Plateado', color: 0xcbd5e1, price: 30 },
     { id: 'madera', name: 'Madera noble', color: 0x92400e, price: 50 },
     { id: 'cristal', name: 'Cristal azul', color: 0x38bdf8, price: 50 },
+  ],
+  rese: [
+    { id: 'azul', name: 'Azul clásico', color: 0x3b82f6, price: 0 },
+    { id: 'rojo', name: 'Rojo elegante', color: 0xef4444, price: 40 },
+    { id: 'verde', name: 'Verde esmeralda', color: 0x10b981, price: 40 },
+    { id: 'morado', name: 'Morado real', color: 0x8b5cf6, price: 60 },
+  ],
+  elevator: [
+    { id: 'naranja', name: 'Naranja', color: 0xffa94d, price: 0 },
+    { id: 'rosa', name: 'Rosa chicle', color: 0xf472b6, price: 40 },
+    { id: 'menta', name: 'Menta fresca', color: 0x5cc9b8, price: 40 },
+    { id: 'dorado', name: 'Dorado real', color: 0xf59e0b, price: 60 },
+  ],
+  night: [
+    { id: 'dia', name: 'Modo día', color: 0xaee3f5, price: 0 },
+    { id: 'noche', name: 'Modo noche', color: 0x1e293b, price: 80 },
   ],
 };
 

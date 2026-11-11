@@ -42,6 +42,25 @@ Ejecutar con `npm test`. Tres suites:
 Salida en `dist/` con `index.html`, JS (~372 KB gzip, Phaser), manifiesto
 PWA, Service Worker e iconos 192/512.
 
+## Mecánicas implementadas (transformación completa)
+
+- **Parejas enamoradas**: deben salir juntas del ascensor; separarlas resta
+  1 estrella (verificado en el solucionador: el óptimo respeta la pareja).
+- **Enemigos**: no pueden estar a bordo a la vez (bloqueo con reacción).
+- **Vidas**: 3 corazones desde el nivel 15; piso equivocado o fin de tiempo
+  cuesta 1; sin corazones se falla el nivel sin perder progreso.
+- **Temporizador**: límite por nivel, música tensa a los 10 s, pausa durante
+  la reparación.
+- **Avería + minijuego de engranajes**: evento aleatorio desde el nivel 20.
+- **Estrellas por eficiencia**: 3★ ≤ óptima+1, 2★ ≤ óptima+3, bonus de
+  monedas por solución perfecta.
+- **Diálogos**: 100+ frases por categoría (turista, VIP, maletero, pareja,
+  enemigo, familia) + mensajes de llegada personalizados.
+- **Recepcionista Rese**: personaje guía con uniforme, pajarita e ID.
+- **17 monstruos originales** (5 nuevos: Turista, Señor VIP, Maletero,
+  Enamorado, Gruñón) + tienda ampliada (uniforme de Rese, color del
+  ascensor, modo noche).
+
 ## Robustez y rendimiento (revisión anti-fallos)
 
 - `localStorage` protegido con try/catch y validación de datos corruptos

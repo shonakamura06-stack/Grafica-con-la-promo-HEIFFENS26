@@ -21,7 +21,8 @@ import Phaser from 'phaser';
 import { getLevel, LevelDef, TOTAL_LEVELS } from '../data/levels';
 import { MONSTER_MAP, MonsterDef, TWIN_GROUP, Mood, floorColor } from '../data/monsters';
 import { loadSave, writeSave, SaveData, getCustomOption } from '../systems/save';
-import { computeOptimal, starsFor, coinsFor, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
+import { computeOptimal, starsFor, coinsFor, isPerfect, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
+import { queueLine, arrivalLine, pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTIONIST_LINES } from '../data/dialogues';
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
 
@@ -94,6 +95,23 @@ export default class GameScene extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Graphics;
   private wrongText!: Phaser.GameObjects.Container;
 
+  // ── Mecánicas nuevas ──
+  private lives = 0;               // corazones (0 = sin sistema de vidas)
+  private livesIcons: Phaser.GameObjects.Image[] = [];
+  private timeLeft = 0;            // segundos restantes
+  private timeText!: Phaser.GameObjects.Text;
+  private timeBar!: Phaser.GameObjects.Graphics;
+  private timerEvent?: Phaser.Time.TimerEvent;
+  private separations = 0;         // parejas separadas (cada una resta 1 estrella)
+  private coupleOf = new Map<number, number>(); // pasajero -> su pareja
+  private enemiesOf = new Map<number, number[]>(); // pasajero -> enemigos
+  private breakdownDone = false;   // ya ocurrió la avería en este nivel
+  private repairing = false;       // minijuego de reparación abierto
+  private speechTimer?: Phaser.Time.TimerEvent;
+  private receptionist!: Phaser.GameObjects.Container;
+  private receptionistText!: Phaser.GameObjects.Text;
+  private receptionistBg!: Phaser.GameObjects.Graphics;
+
   constructor() {
     super('game');
   }
@@ -113,6 +131,14 @@ export default class GameScene extends Phaser.Scene {
     this.paused = false;
     this.floorButtons.clear();
     this.patienceStars = [];
+    this.lives = this.level.lives;
+    this.livesIcons = [];
+    this.timeLeft = this.level.timeLimit;
+    this.separations = 0;
+    this.coupleOf.clear();
+    this.enemiesOf.clear();
+    this.breakdownDone = false;
+    this.repairing = false;
     this.optimal = computeOptimal(this.level).optimal;
   }
 
@@ -155,11 +181,15 @@ export default class GameScene extends Phaser.Scene {
     this.createPassengers();
     this.createBubble();
     this.createFx();
+    this.createReceptionist();
     this.layoutQueue(true);
     this.refreshHud();
     this.refreshFloorButtons();
     this.updateHint();
     this.showSpecialTutorialIfNeeded();
+    this.startTimer();
+    this.startSpeech();
+    this.maybeBreakdown();
 
     // Parpadeos aleatorios de los monstruos en cola
     this.time.addEvent({
@@ -201,14 +231,20 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Cielo y nubes ────────────────────────────────────────────────────────
   private drawSky(): void {
+    const night = getCustomOption('night', this.save.custom.night).id === 'noche';
     const g = this.add.graphics();
-    g.fillGradientStyle(0xaee3f5, 0xaee3f5, 0xd8f3fc, 0xd8f3fc, 1);
+    if (night) {
+      g.fillGradientStyle(0x1e293b, 0x1e293b, 0x334155, 0x334155, 1);
+    } else {
+      g.fillGradientStyle(0xaee3f5, 0xaee3f5, 0xd8f3fc, 0xd8f3fc, 1);
+    }
     g.fillRect(0, 0, W, H);
+    // Nubes SOLO como fondo lejano, detrás de todo (depth 0, alpha baja).
     const cloudDefs: Array<[number, number, number, number]> = [
       [70, 130, 0.8, 9000], [470, 190, 0.65, 12000], [60, 420, 0.55, 14000], [480, 560, 0.7, 11000],
     ];
     cloudDefs.forEach(([x, y, s, dur]) => {
-      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.95).setDepth(1);
+      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.5).setDepth(0);
       this.tweens.add({
         targets: c, x: x + 26, duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
       });
@@ -301,19 +337,19 @@ export default class GameScene extends Phaser.Scene {
     const shaftCloud = this.add.image(CAB_X, BUILD_TOP + 34, 'cloud').setScale(0.42).setAlpha(0.9);
     this.tweens.add({ targets: shaftCloud, y: BUILD_TOP + 42, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    // ── Zona de cola: suelo de baldosas en perspectiva (frente al edificio) ──
+    // ── Zona de cola: suelo de baldosas a todo el ancho inferior ──
     g.fillStyle(0xfff3d6, 1);
-    g.fillRoundedRect(8, 792, BUILD_RIGHT - 4, 162, 14);
+    g.fillRoundedRect(8, 792, W - 16, 162, 14);
     g.lineStyle(2, 0xe8cfa0, 0.8);
-    for (let i = -2; i <= 2; i++) {
-      g.lineBetween(QUEUE_CX + i * 60, 950, QUEUE_CX + i * 38, 796);
+    for (let i = -4; i <= 4; i++) {
+      g.lineBetween(W / 2 + i * 68, 950, W / 2 + i * 44, 796);
     }
     for (const ty of [826, 864, 908]) {
-      g.lineBetween(12, ty, BUILD_RIGHT - 4, ty);
+      g.lineBetween(12, ty, W - 12, ty);
     }
     const flowerColors = [0xf472b6, 0xffc93c, 0xffffff, 0xf87171, 0xc084fc];
-    for (let i = 0; i < 5; i++) {
-      this.drawFlower(g, 150 + i * 22, 946, flowerColors[i % flowerColors.length]);
+    for (let i = 0; i < 9; i++) {
+      this.drawFlower(g, 60 + i * 52, 946, flowerColors[i % flowerColors.length]);
     }
   }
 
@@ -414,6 +450,97 @@ export default class GameScene extends Phaser.Scene {
       const s = this.add.image(W - 116 + i * 36, 44, 'star').setScale(0.5);
       this.patienceStars.push(s);
     }
+
+    // Corazones de vida (desde el nivel 15) y temporizador.
+    this.livesIcons = [];
+    if (this.level.lives > 0) {
+      for (let i = 0; i < this.level.lives; i++) {
+        const h = this.add.image(96 + i * 34, 44, 'heart').setScale(0.62);
+        this.livesIcons.push(h);
+      }
+    }
+    this.timeText = makeText(this, 96, 78, `${this.timeLeft}s`, 16, '#6b4423', false);
+    this.timeBar = this.add.graphics();
+    this.refreshTimerBar();
+  }
+
+  /** Temporizador: cuenta atrás, música tensa a los 10s, fin de tiempo. */
+  private startTimer(): void {
+    this.timerEvent?.remove();
+    this.timerEvent = this.time.addEvent({
+      delay: 1000, loop: true,
+      callback: () => {
+        if (this.won || this.paused || this.repairing) return;
+        this.timeLeft--;
+        this.timeText.setText(`${Math.max(0, this.timeLeft)}s`);
+        this.timeText.setColor(this.timeLeft <= 10 ? '#ef4444' : '#6b4423');
+        this.refreshTimerBar();
+        if (this.timeLeft === 10) {
+          audio.tension();
+          this.showBubble('¡Solo quedan 10 segundos!', CAB_X, 200, 1800);
+        }
+        if (this.timeLeft <= 0) this.timeOut();
+      },
+    });
+  }
+
+  private refreshTimerBar(): void {
+    const total = this.level.timeLimit;
+    const frac = Math.max(0, this.timeLeft / total);
+    this.timeBar.clear();
+    this.timeBar.fillStyle(0x000000, 0.12);
+    this.timeBar.fillRoundedRect(60, 88, 120, 8, 4);
+    this.timeBar.fillStyle(this.timeLeft <= 10 ? 0xef4444 : 0x4ade80, 1);
+    this.timeBar.fillRoundedRect(60, 88, 120 * frac, 8, 4);
+  }
+
+  private timeOut(): void {
+    if (this.won) return;
+    this.timerEvent?.remove();
+    audio.wrong();
+    if (this.level.lives > 0) {
+      this.loseLife('¡Se acabó el tiempo!');
+    } else {
+      this.showBubble('¡Se acabó el tiempo! Inténtalo otra vez.', CAB_X, 300, 2400);
+      this.time.delayedCall(1600, () => this.scene.restart({ levelId: this.level.id }));
+    }
+  }
+
+  /** Pierde un corazón; si no quedan, nivel fallado. */
+  private loseLife(reason: string): void {
+    if (this.lives <= 0) return;
+    this.lives--;
+    audio.wrong();
+    if (this.save.settings.vibration) vibrate([80, 40, 80]);
+    this.livesIcons.forEach((h, i) => h.setTint(i < this.lives ? 0xffffff : 0x555555));
+    this.flashVignette();
+    if (this.lives <= 0) {
+      this.showBubble('¡Te quedaste sin corazones!', CAB_X, 300, 2400);
+      this.time.delayedCall(1800, () => this.failLevel());
+    } else {
+      this.showBubble(`${reason} Te quedan ${this.lives} corazones.`, CAB_X, 300, 2200);
+    }
+  }
+
+  private failLevel(): void {
+    if (this.won) return;
+    this.won = true; // bloquea la entrada
+    const c = this.add.container(0, 0).setDepth(100);
+    const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.5).setOrigin(0).setInteractive();
+    c.add(dim);
+    c.add(makePanel(this, W / 2, H / 2, 420, 360));
+    c.add(makeText(this, W / 2, H / 2 - 120, '¡Nivel fallado!', 32, '#ef4444'));
+    c.add(makeText(this, W / 2, H / 2 - 70, 'No te rindas, recepcionista.', 18, '#6b4423', false));
+    c.add(makeText(this, W / 2, H / 2 - 40, 'Tus monedas y niveles se conservan.', 16, '#6b4423', false));
+    const retry = makeButton(this, W / 2, H / 2 + 30, 260, 58, 'REINTENTAR', {
+      fontSize: 22,
+      onClick: () => this.scene.restart({ levelId: this.level.id }),
+    });
+    const menu = makeButton(this, W / 2, H / 2 + 104, 260, 54, 'NIVELES', {
+      bg: COLORS.purple, fontSize: 20,
+      onClick: () => this.scene.start('levels'),
+    });
+    c.add([retry, menu]);
   }
 
   private refreshPatience(): void {
@@ -464,34 +591,50 @@ export default class GameScene extends Phaser.Scene {
     shadow.fillEllipse(0, CAB_H / 2 + 2, CAB_W - 20, 14);
     this.cab.add(shadow);
 
-    // Cuerpo de cristal (cápsula casi transparente)
+    // Cuerpo de cristal estilo caricatura: marco grueso + reflejos
     const body = this.add.graphics();
-    body.fillStyle(0xbfe8ff, 0.32);
+    // Marco exterior (borde grueso blanco estilo dibujos animados)
+    body.fillStyle(0xffffff, 1);
+    body.fillRoundedRect(-CAB_W / 2 - 3, -CAB_H / 2 - 3, CAB_W + 6, CAB_H + 6, 28);
+    // Cristal interior con degradado
+    body.fillGradientStyle(0xdff4ff, 0xdff4ff, 0xa8dcf5, 0xa8dcf5, 0.85, 0.85, 0.7, 0.7);
     body.fillRoundedRect(-CAB_W / 2, -CAB_H / 2, CAB_W, CAB_H, 26);
-    body.lineStyle(3, 0xffffff, 0.9);
-    body.strokeRoundedRect(-CAB_W / 2, -CAB_H / 2, CAB_W, CAB_H, 26);
-    body.fillStyle(0xffffff, 0.35);
-    body.fillEllipse(-CAB_W / 2 + 34, -CAB_H / 2 + 22, 26, 44);
+    // Reflejo diagonal grande
+    body.fillStyle(0xffffff, 0.45);
+    body.fillTriangle(-CAB_W / 2 + 8, CAB_H / 2 - 10, -CAB_W / 2 + 30, -CAB_H / 2 + 8, -CAB_W / 2 + 44, -CAB_H / 2 + 8);
+    body.fillTriangle(-CAB_W / 2 + 8, CAB_H / 2 - 10, -CAB_W / 2 + 44, -CAB_H / 2 + 8, -CAB_W / 2 + 44, CAB_H / 2 - 24);
+    // Brillo pequeño en la esquina
+    body.fillStyle(0xffffff, 0.7);
+    body.fillCircle(CAB_W / 2 - 16, -CAB_H / 2 + 14, 5);
+    body.fillCircle(CAB_W / 2 - 24, -CAB_H / 2 + 20, 3);
     this.cab.add(body);
 
-    // Puertas de cristal correderas
+    // Puertas de cristal correderas con marco
     const drawDoor = (side: number): Phaser.GameObjects.Graphics => {
       const d = this.add.graphics();
-      d.fillStyle(0xdff4ff, 0.45);
-      d.fillRoundedRect(side * (CAB_W / 4) - CAB_W / 4, -CAB_H / 2, CAB_W / 2, CAB_H, 10);
-      d.lineStyle(3, 0xffffff, 0.95);
-      d.strokeRoundedRect(side * (CAB_W / 4) - CAB_W / 4, -CAB_H / 2, CAB_W / 2, CAB_H, 10);
-      d.fillStyle(0xffffff, 0.4);
-      d.fillEllipse(side * (CAB_W / 4) - 14, -CAB_H / 2 + 24, 12, 26);
+      const dx = side * (CAB_W / 4) - CAB_W / 4;
+      // Marco de la puerta
+      d.fillStyle(0xffffff, 0.95);
+      d.fillRoundedRect(dx - 2, -CAB_H / 2 + 2, CAB_W / 2 + 4, CAB_H - 4, 12);
+      // Cristal de la puerta
+      d.fillGradientStyle(0xeaf7ff, 0xeaf7ff, 0xbfe8ff, 0xbfe8ff, 0.7, 0.7, 0.55, 0.55);
+      d.fillRoundedRect(dx, -CAB_H / 2 + 4, CAB_W / 2, CAB_H - 8, 10);
+      // Reflejo en la puerta
+      d.fillStyle(0xffffff, 0.5);
+      d.fillEllipse(dx + CAB_W / 4 - 6, -CAB_H / 2 + 20, 10, 22);
+      // Tirador
+      d.fillStyle(0x8a7a5a, 1);
+      d.fillRoundedRect(side < 0 ? dx + CAB_W / 2 - 10 : dx + 4, -8, 6, 16, 3);
       return d;
     };
     this.doorL = drawDoor(-1);
     this.doorR = drawDoor(1);
     this.cab.add([this.doorL, this.doorR]);
 
-    // Base naranja con rejillas + parte inferior morada
+    // Base con el color elegido (skin del ascensor)
+    const elevColor = getCustomOption('elevator', this.save.custom.elevator).color;
     const base = this.add.graphics();
-    base.fillStyle(0xffa94d, 1);
+    base.fillStyle(elevColor, 1);
     base.fillRoundedRect(-CAB_W / 2, CAB_H / 2 - 24, CAB_W, 24, 10);
     base.lineStyle(3, 0xffffff, 0.9);
     base.strokeRoundedRect(-CAB_W / 2, CAB_H / 2 - 24, CAB_W, 24, 10);
@@ -542,16 +685,38 @@ export default class GameScene extends Phaser.Scene {
   // ── Pasajeros ────────────────────────────────────────────────────────────
   private createPassengers(): void {
     // Los gemelos se fusionan en un solo pasajero-grupo (suben juntos).
-    const groups: Array<{ monsterId: string; dest: number; slots: number }> = [];
+    // Se guarda el índice original de cada grupo para mapear parejas/enemigos.
+    const groups: Array<{ monsterId: string; dest: number; slots: number; orig: number[] }> = [];
     const twinDest = this.level.passengers.filter((p) => p.m === TWIN_GROUP);
-    for (const p of this.level.passengers) {
-      if (p.m === TWIN_GROUP) continue;
+    this.level.passengers.forEach((p, idx) => {
+      if (p.m === TWIN_GROUP) return;
       const def = MONSTER_MAP[p.m];
-      groups.push({ monsterId: p.m, dest: p.d, slots: def.slots });
-    }
+      groups.push({ monsterId: p.m, dest: p.d, slots: def.slots, orig: [idx] });
+    });
     if (twinDest.length > 0) {
       const def = MONSTER_MAP[TWIN_GROUP];
-      groups.push({ monsterId: TWIN_GROUP, dest: twinDest[0].d, slots: def.slots * twinDest.length });
+      const orig = this.level.passengers.map((p, i) => (p.m === TWIN_GROUP ? i : -1)).filter((i) => i >= 0);
+      groups.push({ monsterId: TWIN_GROUP, dest: twinDest[0].d, slots: def.slots * twinDest.length, orig });
+    }
+
+    // Mapear índices originales -> id de pasajero (para parejas y enemigos).
+    const origToId = new Map<number, number>();
+    groups.forEach((grp, gi) => grp.orig.forEach((oi) => origToId.set(oi, gi)));
+    for (const [a, b] of this.level.couples) {
+      const ia = origToId.get(a), ib = origToId.get(b);
+      if (ia !== undefined && ib !== undefined) {
+        this.coupleOf.set(ia, ib);
+        this.coupleOf.set(ib, ia);
+      }
+    }
+    for (const [a, b] of this.level.enemies) {
+      const ia = origToId.get(a), ib = origToId.get(b);
+      if (ia !== undefined && ib !== undefined) {
+        if (!this.enemiesOf.has(ia)) this.enemiesOf.set(ia, []);
+        if (!this.enemiesOf.has(ib)) this.enemiesOf.set(ib, []);
+        this.enemiesOf.get(ia)!.push(ib);
+        this.enemiesOf.get(ib)!.push(ia);
+      }
     }
 
     groups.forEach((grp, i) => {
@@ -577,6 +742,17 @@ export default class GameScene extends Phaser.Scene {
       badge.add([badgeBg, badgeText]);
       container.add(badge);
 
+      // Indicador de pareja: corazón rosa junto a la insignia
+      if (this.coupleOf.has(i)) {
+        const heart = this.add.image(20, -38, 'heart').setScale(0.55);
+        container.add(heart);
+      }
+      // Indicador de enemigo: rayo de enojo
+      if (this.enemiesOf.has(i)) {
+        const bolt = this.add.image(-20, -38, 'sparkle').setScale(0.7).setTint(0xef4444);
+        container.add(bolt);
+      }
+
       const pax: Passenger = {
         id: i, monsterId: grp.monsterId, def, dest: grp.dest, slots: grp.slots,
         state: 'queue', asleep: false, mood: 'happy', container, image, badge,
@@ -601,7 +777,7 @@ export default class GameScene extends Phaser.Scene {
       const row = rows === 1 ? 0 : Math.floor(i / perRow);
       const idxInRow = rows === 1 ? i : i % perRow;
       const countInRow = rows === 1 ? n : Math.min(perRow, n - row * perRow);
-      const x = QUEUE_CX + (idxInRow - (countInRow - 1) / 2) * 46;
+      const x = W / 2 + (idxInRow - (countInRow - 1) / 2) * 52;
       const y = rows === 1 ? 872 : 842 + row * 56;
       positions.push({ x, y });
     }
@@ -657,7 +833,17 @@ export default class GameScene extends Phaser.Scene {
       }
       if (onboard.some((o) => o.def.rule === 'shy')) {
         audio.error();
-        this.showBubble('Sombrín quiere viajar solo', CAB_X, 640);
+        this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
+        return;
+      }
+      // Enemigos: no pueden viajar juntos.
+      const myEnemies = this.enemiesOf.get(p.id) ?? [];
+      if (myEnemies.some((e) => onboard.some((o) => o.id === e))) {
+        audio.error();
+        this.setMood(p, 'angry');
+        this.showBubble(pickLine(ENEMY_LINES), p.container.x, p.container.y - 70, 1800);
+        this.tweens.add({ targets: p.image, x: 4, duration: 60, yoyo: true, repeat: 3 });
+        this.time.delayedCall(1500, () => this.setMood(p, 'happy'));
         return;
       }
       if (this.usedSlots() + p.slots > this.level.capacity) {
@@ -778,7 +964,29 @@ export default class GameScene extends Phaser.Scene {
 
     const arriving = this.onboard().filter((p) => p.dest === f);
     const sleepers = arriving.filter((p) => p.def.rule === 'sleepwalker');
-    const exiters = arriving.filter((p) => p.def.rule !== 'sleepwalker');
+    // Parejas: si solo subió uno, se separa (pierde 1 estrella) y sale triste.
+    const separated: Passenger[] = [];
+    const exiters = arriving.filter((p) => {
+      if (p.def.rule === 'sleepwalker') return false;
+      const partnerId = this.coupleOf.get(p.id);
+      if (partnerId !== undefined) {
+        const partner = this.passengers.find((q) => q.id === partnerId);
+        if (partner && partner.state !== 'onboard') {
+          separated.push(p);
+          return true; // sale, pero triste
+        }
+      }
+      return true;
+    });
+    if (separated.length > 0) {
+      this.separations++;
+      audio.wrong();
+      separated.forEach((p) => {
+        this.setMood(p, 'angry');
+        this.showBubble(pickLine(SEPARATED_LINES, p.dest), p.container.x, p.container.y - 70, 2200);
+      });
+      this.showBubble('¡Separaste una pareja! -1 estrella', CAB_X, this.cab.y - 90, 2200);
+    }
 
     if (sleepers.length > 0) {
       sleepers.forEach((p) => {
@@ -818,6 +1026,12 @@ export default class GameScene extends Phaser.Scene {
     });
     this.refreshHud();
 
+    // Desde el nivel 15, cada piso equivocado cuesta un corazón.
+    if (this.level.lives > 0) {
+      this.loseLife('¡Piso equivocado!');
+      if (this.lives <= 0) return; // nivel fallado
+    }
+
     if (this.mistakes >= MAX_MISTAKES) {
       this.grumpyReturn = true;
       this.showBubble('¡Los monstruos están muy molestos! Vuelven a recepción…', CAB_X, this.cab.y - 90, 2400);
@@ -849,6 +1063,9 @@ export default class GameScene extends Phaser.Scene {
     audio.happy();
     p.container.setDepth(20);
     p.badge.setVisible(false);
+    // Mensaje de llegada personalizado según su categoría.
+    const line = arrivalLine(p.def.kind, p.dest);
+    this.showBubble(line, p.container.x, p.container.y - 70, 1800);
     const exitX = p.id % 2 === 0 ? BUILD_LEFT + 58 : BUILD_LEFT + 172;
     const exitY = this.bandBottom(this.elevatorFloor) - 30;
     this.tweens.add({ targets: p.container, angle: 7, duration: 110, yoyo: true, repeat: 4 });
@@ -1130,13 +1347,146 @@ export default class GameScene extends Phaser.Scene {
     c.add([resume, restart, exit]);
   }
 
+  // ── Avería del ascensor + minijuego de reparación ──────────────────────
+  private maybeBreakdown(): void {
+    if (this.level.breakdownChance <= 0) return;
+    // La avería ocurre tras el primer viaje (no al inicio).
+    this.time.delayedCall(8000, () => {
+      if (this.won || this.paused || this.breakdownDone) return;
+      if (Math.random() < this.level.breakdownChance) this.triggerBreakdown();
+    });
+  }
+
+  private triggerBreakdown(): void {
+    this.breakdownDone = true;
+    this.repairing = true;
+    audio.breakdown();
+    this.cameras.main.shake(200, 0.005);
+    this.showBubble('¡El ascensor se averió! ¡Hay que repararlo!', CAB_X, 300, 2600);
+    this.time.delayedCall(1200, () => this.openRepair());
+  }
+
+  /** Minijuego: gira los 3 engranajes hasta que todos los marcadores apunten arriba. */
+  private openRepair(): void {
+    const c = this.add.container(0, 0).setDepth(95);
+    const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.55).setOrigin(0).setInteractive();
+    c.add(dim);
+    c.add(makePanel(this, W / 2, H / 2, 440, 460));
+    c.add(makeText(this, W / 2, H / 2 - 190, '¡REPARA EL ASCENSOR!', 26, '#ef4444'));
+    c.add(makeText(this, W / 2, H / 2 - 150, 'Toca cada engranaje para girarlo.', 16, '#6b4423', false));
+    c.add(makeText(this, W / 2, H / 2 - 124, 'Alinea los marcadores hacia arriba.', 16, '#6b4423', false));
+
+    const gears: Array<{ g: Phaser.GameObjects.Graphics; rot: number; x: number; y: number }> = [];
+    const gearPos = [
+      { x: W / 2 - 110, y: H / 2 - 20 },
+      { x: W / 2, y: H / 2 - 20 },
+      { x: W / 2 + 110, y: H / 2 - 20 },
+    ];
+    const drawGear = (g: Phaser.GameObjects.Graphics, rot: number) => {
+      g.clear();
+      g.fillStyle(0x8a7a5a, 1);
+      g.fillCircle(0, 0, 34);
+      g.fillStyle(0xa06a35, 1);
+      for (let i = 0; i < 8; i++) {
+        const a = rot + (i / 8) * Math.PI * 2;
+        g.fillRect(Math.cos(a) * 34 - 5, Math.sin(a) * 34 - 5, 10, 10);
+      }
+      g.fillStyle(0xfff3d6, 1);
+      g.fillCircle(0, 0, 12);
+      // Marcador que debe apuntar arriba (rotación 0 = arriba)
+      g.fillStyle(0xef4444, 1);
+      g.fillTriangle(-6, -20, 6, -20, 0, -34);
+    };
+    gearPos.forEach((pos, i) => {
+      const g = this.add.graphics();
+      g.setPosition(pos.x, pos.y);
+      const rot = (Math.floor(Math.random() * 4)) * (Math.PI / 2);
+      drawGear(g, rot);
+      gears.push({ g, rot, x: pos.x, y: pos.y });
+      c.add(g);
+      const zone = this.add.zone(pos.x, pos.y, 90, 90).setInteractive({ useHandCursor: true });
+      zone.on('pointerdown', () => {
+        const gear = gears[i];
+        gear.rot += Math.PI / 2;
+        audio.gear();
+        drawGear(gear.g, gear.rot);
+        this.tweens.add({ targets: gear.g, angle: gear.g.angle + 90, duration: 150 });
+        if (gears.every((gg) => Math.abs(((gg.rot % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) < 0.01)) {
+          audio.repaired();
+          this.repairing = false;
+          c.destroy();
+          this.showBubble('¡Ascensor reparado! ¡A seguir!', CAB_X, 300, 2000);
+        }
+      });
+      c.add(zone);
+    });
+    c.add(makeText(this, W / 2, H / 2 + 90, 'El cronómetro está en pausa.', 14, '#a06a35', false));
+  }
+
+  // ── Burbujas de diálogo de los monstruos en cola ───────────────────────
+  private startSpeech(): void {
+    this.speechTimer?.remove();
+    this.speechTimer = this.time.addEvent({
+      delay: 3500, loop: true,
+      callback: () => {
+        if (this.won || this.paused || this.repairing) return;
+        const waiting = this.passengers.filter((p) => p.state === 'queue');
+        if (waiting.length === 0) return;
+        // Mostrar hasta 2 globos a la vez, sin solaparse (turnos).
+        const shuffled = [...waiting].sort(() => Math.random() - 0.5).slice(0, 2);
+        shuffled.forEach((p, i) => {
+          const line = queueLine(p.def.kind, p.dest);
+          this.showBubble(line, p.container.x, p.container.y - 70, 3000);
+        });
+      },
+    });
+  }
+
+  // ── Recepcionista Rese: personaje guía ─────────────────────────────────
+  private createReceptionist(): void {
+    this.receptionistBg = this.add.graphics();
+    this.receptionistText = this.add.text(0, 0, '', {
+      fontFamily: 'Arial, sans-serif', fontSize: '15px', color: '#6b4423',
+      align: 'center', wordWrap: { width: 200 },
+    }).setOrigin(0.5);
+    this.receptionist = this.add.container(0, 0, [this.receptionistBg, this.receptionistText]).setDepth(70).setVisible(false);
+    // Rese aparece en la recepción (junto al mostrador).
+    const reseColor = getCustomOption('rese', this.save.custom.rese).color;
+    const img = this.add.image(BUILD_LEFT + 200, LOBBY_TOP + 30, 'rese').setScale(0.55).setDepth(9).setTint(reseColor);
+    this.tweens.add({ targets: img, y: LOBBY_TOP + 24, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    // Saludo inicial en el nivel 1.
+    if (this.level.id === 1) {
+      this.time.delayedCall(800, () => {
+        this.sayAsReceptionist(pickLine(RECEPTIONIST_LINES.welcome), 3000);
+      });
+    }
+  }
+
+  private sayAsReceptionist(text: string, duration = 2600): void {
+    const w = Math.min(260, this.receptionistText.width + 40);
+    const h = Math.max(48, this.receptionistText.height + 30);
+    this.receptionistText.setText(text);
+    this.receptionistBg.clear();
+    this.receptionistBg.fillStyle(0xffffff, 0.97);
+    this.receptionistBg.fillRoundedRect(-w / 2, -h / 2, w, h, 12);
+    this.receptionistBg.lineStyle(3, 0x241640, 1);
+    this.receptionistBg.strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
+    this.receptionist.setPosition(BUILD_LEFT + 200, LOBBY_TOP - 30).setVisible(true).setAlpha(1);
+    this.time.delayedCall(duration, () => {
+      this.tweens.add({ targets: this.receptionist, alpha: 0, duration: 300, onComplete: () => this.receptionist.setVisible(false) });
+    });
+  }
+
   private win(): void {
     if (this.won) return;
     this.won = true;
     audio.victory();
-    const stars = starsFor(this.distance, this.optimal);
+    let stars = starsFor(this.distance, this.optimal);
+    // Cada pareja separada resta una estrella (mínimo 1).
+    stars = Math.max(1, stars - this.separations);
+    const perfect = isPerfect(this.distance, this.optimal) && this.separations === 0;
     const prevStars = this.save.stars[this.level.id] ?? 0;
-    const earned = stars > prevStars ? coinsFor(stars) : 2;
+    const earned = stars > prevStars ? coinsFor(stars, perfect) : 2;
 
     this.save.stars[this.level.id] = Math.max(prevStars, stars);
     this.save.coins += earned;
@@ -1181,6 +1531,12 @@ export default class GameScene extends Phaser.Scene {
     });
 
     c.add(makeText(this, W / 2, H / 2 - 80, `Recorrido: ${this.distance} · Óptimo: ${this.optimal}`, 18, '#6b4423', false));
+    if (perfect) {
+      c.add(makeText(this, W / 2, H / 2 - 56, '¡Solución perfecta! Bonus de monedas', 15, '#2f9e44', false));
+    }
+    if (this.separations > 0) {
+      c.add(makeText(this, W / 2, H / 2 - 56, `Parejas separadas: ${this.separations} (-${this.separations} estrella)`, 15, '#ef4444', false));
+    }
     const coinRow = this.add.container(W / 2, H / 2 - 38);
     coinRow.add(this.add.image(0, 0, 'coin').setScale(0.7));
     coinRow.add(makeText(this, 24, 0, `+${earned}`, 24, '#a06a35'));
