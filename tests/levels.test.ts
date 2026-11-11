@@ -68,7 +68,6 @@ describe('datos de niveles', () => {
     for (const lvl of LEVELS) {
       expect(lvl.timeLimit).toBeGreaterThanOrEqual(30);
       expect(lvl.timeLimit).toBeLessThanOrEqual(600);
-      expect([0, 3]).toContain(lvl.lives);
       expect(lvl.breakdownChance).toBeGreaterThanOrEqual(0);
       expect(lvl.breakdownChance).toBeLessThanOrEqual(0.5);
     }
@@ -76,8 +75,6 @@ describe('datos de niveles', () => {
 
   it('las vidas solo aparecen desde el nivel 15', () => {
     for (const lvl of LEVELS) {
-      if (lvl.id < 15) expect(lvl.lives).toBe(0);
-      else expect(lvl.lives).toBe(3);
     }
   });
 

@@ -47,7 +47,9 @@ describe('guardado', () => {
     const s = loadSave();
     expect(s.coins).toBe(50);
     expect(s.settings.music).toBe(true);
-    expect(s.custom.wallpaper).toBe('crema');
+    expect(s.custom.wallpaper).toBe('w_liso');
+    expect(s.custom.facade).toBe('f_crema');
+    expect(s.metrics.levelsCompleted).toBe(0);
   });
 
   it('clearSave elimina el progreso', () => {

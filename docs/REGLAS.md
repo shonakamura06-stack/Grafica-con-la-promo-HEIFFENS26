@@ -91,7 +91,7 @@ una tarjeta visual. Después queda registrada en el álbum.
 - **Aparición**: sube desde abajo hasta ocupar media pantalla, con fondo oscurecido,
   globo de diálogo y botón SALTAR. El temporizador se pausa mientras explica.
 - **Cuándo explica**: solo en el nivel 1 o la primera vez que aparece una mecánica nueva
-  (parejas, corazones/vidas, enemigos, maletas de Maletero, averías).
+  (parejas, enemigos, maletas de Maletero, dúos, miedosos, averías).
 - **Repaso**: en el menú de PAUSA, el botón «RESE TE EXPLICA» repite la explicación del nivel.
 - **Perdón**: la primera equivocación del nivel (piso equivocado, enemigos juntos o pareja
   separada) hace reaparecer a Rese UNA sola vez y **no cuesta estrella**:
@@ -107,21 +107,27 @@ una tarjeta visual. Después queda registrada en el álbum.
 - Un clic con la frase a medias la completa al instante; el siguiente clic pasa a la siguiente línea.
 - Botón SALTAR ▶ arriba a la derecha para quien ya se sabe la lección.
 
-## Economía de vidas y monetización
+## Vidas, reintentos y monetización (Economía V3)
 
-- Niveles 15+: **3 corazones globales** (compartidos entre niveles, no por intento).
-- Cada piso equivocado gasta 1 corazón global.
-- Con 0 corazones **no se reintenta el nivel**: aparece el panel «¡SIN CORAZONES!» con:
-  1. **Espera de 25 min** (temporizador real en pantalla; al cumplirse vuelven los 3).
-  2. **Ver anuncio (+3 ❤)**: interstitial de recompensa de 12 s. En esta versión web es una
-     promoción animada del propio juego (sin redes externas, seguro para niños); en la
-     versión de tienda ese slot se conecta a AdMob/AdSense.
-  3. **Premium 19,99 Bs / mes**: corazones infinitos y sin anuncios. El cobro real se activa
-     en la versión de tienda (Play Store/APK); aquí existe un botón demo sin cobro para probarlo.
-- Recomendación de monetización del equipo: **sin anuncios obligatorios ni cajas de suerte**;
-  ingreso principal = pack premium único o mensual barato (19,99 Bs) + anuncios *opt-in*
-  (solo quien quiere vidas extra). Es el modelo aceptado por políticas de apps infantiles.
-- El temporizador de espera y el premium se guardan en el save (resisten cerrar el juego).
+- **La campaña NO tiene vidas ni energía**: reintentos ilimitados, gratis e inmediatos.
+  Equivocarse de piso cuesta estrellas (y el ánimo de los monstruos), nunca tiempo de espera.
+- Se retiraron: corazones globales, regeneración por horas, compra de corazones con monedas,
+  anuncio de recompensa de 12 s, suscripción premium mensual y regalo diario con corazón.
+- **Modo Desafío (opcional y separado)**: se presenta en el nivel 10. Da 3 vidas por partida;
+  si se acaban, el panel ofrece reintentar al instante, jugar en modo normal o salir.
+  Cada nivel superado en Desafío otorga una insignia y **25 monedas una sola vez**.
+- Las **3 estrellas** siguen siendo la evaluación del rendimiento, con umbrales
+  (óptimo+1 = 3★, óptimo+3 = 2★) y penalización por reglas rotas.
+- **Monedas**: se ganan por logros únicos (20 primera victoria, +5 por estrella nueva,
+  +10 ruta óptima, misiones 10–30, hitos 50–100, insignia de desafío 25). Repetir no paga.
+- **Tienda**: solo cosméticos, con precios uniformes por categoría (100/150/250/300/500) y
+  un paquete de 800. Vista previa real, confirmación, animación de compra e inventario.
+- **Compras con dinero real**: pago único (Pack Deluxe y packs temáticos) en una sección
+  para adultos con barrera parental, contenido exacto listado antes del precio y demo sin
+  cobro en esta versión web. Sin cajas aleatorias, sin ofertas con cuenta atrás, sin
+  venta de monedas y sin ventajas para resolver los puzles.
+- **Publicidad**: ninguna en la primera versión comercial. Detalles, política infantil y
+  simulación de balance completo en `docs/ECONOMIA.md`.
 
 ## Reglas de claridad y tiempos (corrección de jugabilidad)
 
@@ -138,7 +144,8 @@ una tarjeta visual. Después queda registrada en el álbum.
 - **Cabina lógica**: el suelo de la cabina marca tantos pads como capacidad (2/3/4) y el techo
   lleva un punto dorado por lugar; con capacidad 4 los monstruos viajan algo más apretados.
 - **Desbloqueos anunciados**: al empezar un nivel con novedad (ascensor más grande, parejas,
-  corazones, enemigos, maletas, averías) aparece una tarjeta animada "¡NUEVO!" con icono,
+  enemigos, maletas, dúos, miedosos, averías, Modo Desafío) aparece una tarjeta animada
+  "¡NUEVO!" con icono,
   explicación y toque para continuar, antes del diálogo de Rese.
 - **Rese sin voz**: los diálogos son solo texto (letra a letra, clic para continuar).
   Los clips de audio se eliminaron del juego y del repositorio.
@@ -172,9 +179,10 @@ una tarjeta visual. Después queda registrada en el álbum.
 - Globos cartoon: picos irregulares, contorno grueso oscuro, sombra gris desplazada y
   cola que apunta al que habla (estilo grito de cómic).
 
-## Economía v2 (corazones escasos) — reemplaza la sección de 25 min
+## Economía V3 (sustituye a la V2 de corazones escasos)
 
-- Regeneración: **1 corazón por hora** (ya no 3 en 25 min).
-- Con 0 corazones: **anuncio +1 ❤**, **comprar 1 ❤ por 150 monedas**, **premium 19,99 Bs/mes**
-  o esperar la hora. Detalles y justificación de precios en `docs/ECONOMIA.md`.
-- **Regalo diario** en el menú: +40 monedas y +1 corazón, una vez por día (doble con premium).
+- Corazones, anuncio de recompensa, premium mensual y regalo diario: **eliminados**.
+- Monedas por logros únicos + tienda cosmética + packs de pago único con barrera parental.
+- Migración automática del guardado antiguo: conserva monedas, estrellas, récords, álbum y
+  compras; devuelve en monedas las categorías retiradas; convierte el premium activo en
+  Pack Deluxe. Tabla completa y simulación de balance en `docs/ECONOMIA.md`.

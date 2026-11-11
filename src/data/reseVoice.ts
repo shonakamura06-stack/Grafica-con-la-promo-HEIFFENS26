@@ -34,22 +34,6 @@ export const RESE_VOICE: Record<string, ReseClip> = {
     ],
     "dur": 12.36
   },
-  "tut_lives": {
-    "file": "audio/rese/tut_lives.mp3",
-    "lines": [
-      "¡Atención! Desde hoy tienes 3 corazones.",
-      "Cada piso equivocado cuesta 1 corazón.",
-      "Si pierdes los 3, reintentas el nivel.",
-      "Mira bien los números… ¡y tú puedes!"
-    ],
-    "t": [
-      0.0,
-      2.66,
-      5.32,
-      8.42
-    ],
-    "dur": 11.52
-  },
   "tut_enemies": {
     "file": "audio/rese/tut_enemies.mp3",
     "lines": [

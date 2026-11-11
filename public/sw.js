@@ -1,7 +1,7 @@
 /* Service Worker — ¡Piso Equivocado!
    Estrategia: cache-first para recursos del propio juego (funciona sin conexión
    después de la primera carga). No hace peticiones de red durante la partida. */
-const CACHE = 'piso-equivocado-v1';
+const CACHE = 'piso-equivocado-v3';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {

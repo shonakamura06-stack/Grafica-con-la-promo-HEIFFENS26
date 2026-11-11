@@ -92,7 +92,7 @@ export default class SettingsScene extends Phaser.Scene {
     }
 
     makeText(this, W / 2, H - 90, '¡Piso Equivocado! — El Hotel de Monstruos', 16, '#a06a35', false);
-    makeText(this, W / 2, H - 60, 'Juego original sin anuncios ni compras reales.', 14, '#a06a35', false);
+    makeText(this, W / 2, H - 60, 'Campaña gratis y completa · sin anuncios · compras opcionales de cosméticos.', 12, '#a06a35', false);
     makeText(this, W / 2, H - 34, 'Hecho con Phaser · v1.0', 14, '#a06a35', false);
   }
 }

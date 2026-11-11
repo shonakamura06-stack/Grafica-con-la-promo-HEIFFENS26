@@ -164,3 +164,32 @@ PWA, Service Worker e iconos 192/512.
 - Corazones: regen lenta (REGEN_MS = 1 h por corazón), addHeart, buyHeartWithCoins(150),
   claimDaily(+40 🪙 +1 ❤) con popup animado en el menú; anuncio de recompensa ahora da +1 ❤.
 - Nuevo `docs/ECONOMIA.md`: fuentes/sumideros, precios y política anti-manipulativa.
+
+## Actualización: Economía V3 (campaña gratis, monedas por logros, tienda y packs)
+
+- `npm test`: **99/99 pruebas pasan** (5 archivos). `npm run build` limpio (`tsc --noEmit` + Vite).
+- Nuevas suites:
+  - `tests/economy.test.ts` (48 pruebas): campaña sin energía (el guardado ya no tiene
+    corazones ni premium y el módulo ya no exporta `spendHeart`/`tickHearts`/`isPremium`),
+    monedas por logros únicos (20/5/10/25), diferencia de estrellas, récord sin monedas,
+    **50 repeticiones del mismo nivel pagan exactamente 45 🪙**, misiones cobrables una sola
+    vez y sin caducar, precios por categoría, paquete que entrega su contenido exacto,
+    objetos de pago NO comprables con monedas, packs con contenido real existente,
+    migración V2→V3 (conserva monedas/estrellas/récords/álbum, devuelve 170 🪙 de categorías
+    retiradas, premium activo → Pack Deluxe, sin doble devolución) y **auditoría combinada
+    anti-duplicación** (20 partidas + 10 desafíos + 40 reclamos + 10 compras + 5 packs).
+  - `tests/balance.test.ts` (11 pruebas): los 5 perfiles simulados, repeticiones pagan 0,
+    nadie supera el máximo teórico (2 495 🪙), el perfeccionista compra todo el catálogo
+    (sobran 5 🪙 → sin inflación), los demás consiguen 4–10 de 12 objetos, ningún objeto
+    exige más de 8 sesiones (100 🪙) ni 60 (paquete 800 🪙), simulación determinista y
+    paquete más barato que comprar por separado.
+- Retirado: `src/systems/lives.ts`, `src/scenes/CustomizeScene.ts`, `tests/lives.test.ts`,
+  el campo `lives` de los 30 niveles y `coinsFor`/`isRecord` de `scoring.ts` (el pago ahora
+  vive en `systems/economy.ts`).
+- Nuevo: `src/data/shop.ts` (catálogo y packs), `src/data/missions.ts`, `src/systems/economy.ts`,
+  `src/systems/balance.ts` (simulación), `src/systems/cosmetics.ts` (aplicación visual real),
+  `src/systems/parental.ts` (barrera parental), `src/scenes/ShopScene.ts`,
+  `src/scenes/MissionsScene.ts`, `src/scenes/DataScene.ts` (métricas agregadas locales).
+- Balance resultante (simulación real, no suposiciones): casual 1 130 🪙 (8/12 objetos),
+  habitual 1 650 (10/12), 3 estrellas 2 455 (12/12), repetidor 445 con 64 repeticiones (4/12),
+  sesión corta 750 (6/12). Catálogo completo: 2 250 🪙 con paquete / 2 450 por separado.

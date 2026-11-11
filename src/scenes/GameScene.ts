@@ -20,14 +20,22 @@
 import Phaser from 'phaser';
 import { getLevel, LEVELS, LevelDef, TOTAL_LEVELS } from '../data/levels';
 import { MONSTER_MAP, MonsterDef, TWIN_GROUP, Mood, floorColor } from '../data/monsters';
-import { loadSave, writeSave, SaveData, getCustomOption } from '../systems/save';
-import { computeOptimal, starsFor, coinsFor, isPerfect, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
+import { loadSave, writeSave, SaveData } from '../systems/save';
+import { computeOptimal, starsFor, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
 import { queueLine, arrivalLine, pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTIONIST_LINES } from '../data/dialogues';
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
 import { RESE_VOICE } from '../data/reseVoice';
-import { openOutOfLives } from '../systems/lives';
-import { isPremium, tickHearts, spendHeart } from '../systems/save';
+import { settleLevel, settleChallenge, claimableMissions } from '../systems/economy';
+import {
+  skyColors, cloudAlpha, facadeColor, facadeShade, drawWallpaperPattern,
+  elevatorColors, decorateRese, monsterAccessory, drawLobbyDecor, addAmbient,
+  goldenCelebration, hasTheme,
+} from '../systems/cosmetics';
+import { CHALLENGE_LIVES } from './LevelSelectScene';
+
+/** Nivel en que se presenta el Modo Desafío opcional (nunca es obligatorio). */
+const CHALLENGE_UNLOCK_LEVEL = 10;
 
 type PaxState = 'queue' | 'boarding' | 'onboard' | 'exiting' | 'delivered';
 
@@ -99,8 +107,11 @@ export default class GameScene extends Phaser.Scene {
   private wrongText!: Phaser.GameObjects.Container;
 
   // ── Mecánicas nuevas ──
-  private lives = 0;               // corazones (0 = sin sistema de vidas)
+  private lives = 0;               // vidas SOLO del Modo Desafío opcional (en memoria)
+  private challenge = false;       // ¿partida en Modo Desafío?
+  private couplesDelivered = 0;    // parejas entregadas juntas (misiones)
   private livesIcons: Phaser.GameObjects.Image[] = [];
+  private reseCostume?: Phaser.GameObjects.Graphics;
   private timeLeft = 0;            // segundos restantes
   private timeText!: Phaser.GameObjects.Text;
   private timeBar!: Phaser.GameObjects.Graphics;
@@ -142,7 +153,7 @@ export default class GameScene extends Phaser.Scene {
     super('game');
   }
 
-  init(data: { levelId?: number }): void {
+  init(data: { levelId?: number; challenge?: boolean }): void {
     this.level = getLevel(data.levelId ?? 1);
     this.save = loadSave();
     this.passengers = [];
@@ -157,9 +168,16 @@ export default class GameScene extends Phaser.Scene {
     this.paused = false;
     this.floorButtons.clear();
     this.patienceStars = [];
-    this.useHearts = this.level.lives > 0;
-    tickHearts(this.save);
-    this.lives = this.useHearts ? (isPremium(this.save) ? 3 : this.save.hearts) : 0;
+    // Economía V3: la campaña NO tiene vidas. Solo el Modo Desafío opcional.
+    this.challenge = data.challenge === true;
+    this.useHearts = this.challenge;
+    this.lives = this.challenge ? CHALLENGE_LIVES : 0;
+    this.couplesDelivered = 0;
+    this.save.metrics.sessionsStarted += 1;
+    if (!this.challenge && this.save.completed[this.level.id] === true) {
+      this.save.metrics.levelReplays += 1;
+    }
+    writeSave(this.save);
     this.livesIcons = [];
     this.timeLeft = this.level.timeLimit;
     this.separations = 0;
@@ -275,20 +293,18 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Cielo y nubes ────────────────────────────────────────────────────────
   private drawSky(): void {
-    const night = getCustomOption('night', this.save.custom.night).id === 'noche';
+    const sky = skyColors(this.save);
     const g = this.add.graphics();
-    if (night) {
-      g.fillGradientStyle(0x1e293b, 0x1e293b, 0x334155, 0x334155, 1);
-    } else {
-      g.fillGradientStyle(0xaee3f5, 0xaee3f5, 0xd8f3fc, 0xd8f3fc, 1);
-    }
+    g.fillGradientStyle(sky.top, sky.top, sky.bottom, sky.bottom, 1);
     g.fillRect(0, 0, W, H);
+    // Decoración ambiental de la temática equipada (estrellas, peces, fantasmas…)
+    if (hasTheme(this.save)) addAmbient(this, this.save, W, H);
     // Nubes SOLO como fondo lejano, detrás de todo (depth 0, alpha baja).
     const cloudDefs: Array<[number, number, number, number]> = [
       [70, 130, 0.8, 9000], [470, 190, 0.65, 12000], [60, 420, 0.55, 14000], [480, 560, 0.7, 11000],
     ];
     cloudDefs.forEach(([x, y, s, dur]) => {
-      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.5).setDepth(0);
+      const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(cloudAlpha(this.save)).setDepth(0);
       this.tweens.add({
         targets: c, x: x + 26, duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
       });
@@ -297,7 +313,8 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Hotel kawaii (2.5D) ──────────────────────────────────────────────────
   private drawHotel(): void {
-    const wallpaper = getCustomOption('wallpaper', this.save.custom.wallpaper).color;
+    const facade = facadeColor(this.save);
+    const shade = facadeShade(this.save);
     const N = this.level.floors;
     const fh = this.fh();
     const top = this.buildTop();
@@ -308,20 +325,22 @@ export default class GameScene extends Phaser.Scene {
     g.fillStyle(0x000000, 0.1);
     g.fillRoundedRect(BUILD_LEFT + 6, top + 8, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - top, 14);
     // Techo en 3D: cara superior en perspectiva + franja frontal rosa
-    g.fillStyle(0xfbcfe8, 1);
+    const roof = hasTheme(this.save) ? this.save.custom.theme === 't_embrujado' ? 0x6b4a8a : 0xf9a8d4 : 0xfbcfe8;
+    g.fillStyle(roof, 1);
     g.fillPoints([V(BUILD_LEFT, top), V(BUILD_RIGHT, top), V(BUILD_RIGHT + 10, top - 12), V(BUILD_LEFT + 10, top - 12)], true);
-    g.fillStyle(0xf9a8d4, 1);
+    g.fillStyle(hasTheme(this.save) ? shade : 0xf9a8d4, 1);
     g.fillRoundedRect(BUILD_LEFT - 2, top - 9, BUILD_RIGHT - BUILD_LEFT + 4, 14, 7);
     g.fillStyle(0xffffff, 0.5);
     g.fillRect(BUILD_LEFT + 4, top - 7, BUILD_RIGHT - BUILD_LEFT - 8, 4);
-    // Fachada crema
-    g.fillStyle(wallpaper, 1);
+    // Fachada (color comprado en la tienda) + papel tapiz encima
+    g.fillStyle(facade, 1);
     g.fillRoundedRect(BUILD_LEFT, top, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - top, 14);
+    drawWallpaperPattern(g, this.save, BUILD_LEFT, top, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - top);
     // Pared lateral derecha (profundidad)
     g.fillStyle(0x000000, 0.08);
     g.fillPoints([V(BUILD_RIGHT - 14, top + 8), V(BUILD_RIGHT, top + 8), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 14, BUILD_BOTTOM)], true);
     // Zócalo inferior
-    g.fillStyle(0xf5d9a8, 1);
+    g.fillStyle(shade, 1);
     g.fillRect(BUILD_LEFT, BUILD_BOTTOM - 12, BUILD_RIGHT - BUILD_LEFT, 12);
 
     // Bandas de pisos: dos ventanas con balcón por piso + banner numerado
@@ -330,7 +349,7 @@ export default class GameScene extends Phaser.Scene {
       const color = floorColor(f);
       g.fillStyle(0xffffff, 0.22);
       g.fillRect(BUILD_LEFT + 6, top, BUILD_RIGHT - BUILD_LEFT - 12, fh);
-      g.fillStyle(0xf5d9a8, 1);
+      g.fillStyle(shade, 1);
       g.fillRect(BUILD_LEFT + 6, top, BUILD_RIGHT - BUILD_LEFT - 12, 5);
       g.fillStyle(0x000000, 0.05);
       g.fillRect(BUILD_LEFT + 6, top + 5, BUILD_RIGHT - BUILD_LEFT - 12, 6);
@@ -362,6 +381,8 @@ export default class GameScene extends Phaser.Scene {
     g.fillRoundedRect(deskX + 150, deskY - 8, 14, 14, 3);
     g.fillStyle(0x4ade80, 1);
     g.fillCircle(deskX + 157, deskY - 14, 8);
+    // Decoración de hotel comprada (fuente kawaii o araña de cristal)
+    drawLobbyDecor(this, this.save, BUILD_LEFT + 205, LOBBY_TOP + 16);
 
     // ── Torre de cristal del ascensor (columna 3) ──
     g.fillGradientStyle(0xeaf7ff, 0xeaf7ff, 0xbfe8ff, 0xbfe8ff, 0.5, 0.5, 0.3, 0.3);
@@ -496,14 +517,14 @@ export default class GameScene extends Phaser.Scene {
       this.patienceStars.push(s);
     }
 
-    // Corazones de vida (desde el nivel 15) y temporizador, DEBAJO del cartel.
+    // Vidas SOLO en el Modo Desafío opcional (la campaña no gasta nada).
     this.livesIcons = [];
     if (this.useHearts) {
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < CHALLENGE_LIVES; i++) {
         const h = this.add.image(30 + i * 34, 96, 'heart').setScale(0.62);
         this.livesIcons.push(h);
       }
-      if (isPremium(this.save)) makeText(this, 30 + 3 * 34 + 4, 96, '∞', 22, '#ef4444');
+      makeText(this, 30 + CHALLENGE_LIVES * 34 + 8, 96, 'DESAFÍO', 12, '#ef4444', false);
     }
     this.timeText = makeText(this, 210, 96, `${this.timeLeft}s`, 16, '#6b4423', false);
     this.timeBar = this.add.graphics();
@@ -544,37 +565,57 @@ export default class GameScene extends Phaser.Scene {
     if (this.won) return;
     this.timerEvent?.remove();
     audio.wrong();
+    this.save.metrics.timeouts += 1;
+    writeSave(this.save);
     this.failLevel('¡Se acabó el tiempo!');
   }
 
-  /** Gasta un corazón global; sin corazones, panel de espera/anuncio/premium. */
+  /**
+   * Modo Desafío (opcional): gasta una vida de la partida. No toca el guardado,
+   * no hay esperas ni anuncios: al quedarse sin vidas se puede reintentar gratis.
+   */
   private loseLife(reason: string): void {
     if (!this.useHearts) return;
-    if (isPremium(this.save)) {
-      this.showBubble(`${reason} (Premium: corazones infinitos)`, CAB_X, 300, 1800);
-      return;
-    }
-    this.lives = spendHeart(this.save);
-    writeSave(this.save);
+    this.lives = Math.max(0, this.lives - 1);
     audio.wrong();
     if (this.save.settings.vibration) vibrate([80, 40, 80]);
     this.livesIcons.forEach((h) => this.tweens.add({ targets: h, scale: 1.0, duration: 80, yoyo: true, onStart: () => h.setScale(0.4) }));
     this.livesIcons.forEach((h, i) => h.setTint(i < this.lives ? 0xffffff : 0x555555));
     this.flashVignette();
     if (this.lives <= 0) {
-      this.won = true; // bloquea la entrada mientras se decide qué hacer
-      openOutOfLives(this, this.save, {
-        onExit: () => this.scene.start('levels'),
-        onRefilled: () => {
-          this.won = false;
-          this.lives = this.save.hearts;
-          this.livesIcons.forEach((h, i) => h.setTint(i < this.lives ? 0xffffff : 0x555555));
-          this.showBubble('¡Corazones recargados! Sigue jugando.', CAB_X, 300, 2000);
-        },
-      });
+      this.challengeOver(reason);
     } else {
-      this.showBubble(`${reason} Te quedan ${this.lives} corazones.`, CAB_X, 300, 2200);
+      this.showBubble(`${reason} Te quedan ${this.lives} vidas en este desafío.`, CAB_X, 300, 2200);
     }
+  }
+
+  /** Fin del Modo Desafío: siempre se puede volver a intentar, gratis y al instante. */
+  private challengeOver(reason: string): void {
+    if (this.won) return;
+    this.won = true;
+    this.timerEvent?.remove();
+    const c = this.add.container(0, 0).setDepth(100);
+    c.add(this.add.rectangle(0, 0, W, H, 0x000000, 0.55).setOrigin(0).setInteractive());
+    c.add(makePanel(this, W / 2, H / 2, 420, 400));
+    c.add(makeText(this, W / 2, H / 2 - 148, '¡SE ACABARON LAS VIDAS!', 24, '#ef4444'));
+    c.add(makeText(this, W / 2, H / 2 - 104, reason, 16, '#a06a35', false));
+    c.add(makeText(this, W / 2, H / 2 - 68, 'Esto era el Modo Desafío (opcional).', 15, '#6b4423', false));
+    c.add(makeText(this, W / 2, H / 2 - 44, 'Tu campaña sigue intacta: sin esperas, sin anuncios,', 14, '#6b4423', false));
+    c.add(makeText(this, W / 2, H / 2 - 24, 'sin gastar monedas. Vuelve a intentarlo cuando quieras.', 14, '#6b4423', false));
+    c.add(makeButton(this, W / 2, H / 2 + 34, 300, 60, 'REINTENTAR DESAFÍO', {
+      fontSize: 18,
+      onClick: () => this.scene.restart({ levelId: this.level.id, challenge: true }),
+    }));
+    c.add(makeButton(this, W / 2, H / 2 + 104, 300, 56, 'JUGAR EN MODO NORMAL', {
+      bg: COLORS.mintDark, fontSize: 16,
+      onClick: () => this.scene.restart({ levelId: this.level.id, challenge: false }),
+    }));
+    c.add(makeButton(this, W / 2, H / 2 + 164, 260, 52, 'SALIR A NIVELES', {
+      bg: COLORS.purple, fontSize: 16,
+      onClick: () => this.scene.start('levels'),
+    }));
+    c.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 300, ease: 'Back.easeOut' });
   }
 
   private failLevel(reason = '¡Nivel fallado!'): void {
@@ -586,10 +627,10 @@ export default class GameScene extends Phaser.Scene {
     c.add(makePanel(this, W / 2, H / 2, 420, 360));
     c.add(makeText(this, W / 2, H / 2 - 120, reason, 32, '#ef4444'));
     c.add(makeText(this, W / 2, H / 2 - 70, 'No te rindas, recepcionista.', 18, '#6b4423', false));
-    c.add(makeText(this, W / 2, H / 2 - 40, 'Tus monedas y niveles se conservan.', 16, '#6b4423', false));
+    c.add(makeText(this, W / 2, H / 2 - 40, 'Reintentar es gratis e inmediato: no hay vidas ni esperas.', 13, '#2f9e44', false));
     const retry = makeButton(this, W / 2, H / 2 + 30, 260, 58, 'REINTENTAR', {
       fontSize: 22,
-      onClick: () => this.scene.restart({ levelId: this.level.id }),
+      onClick: () => this.scene.restart({ levelId: this.level.id, challenge: this.challenge }),
     });
     const menu = makeButton(this, W / 2, H / 2 + 104, 260, 54, 'NIVELES', {
       bg: COLORS.purple, fontSize: 20,
@@ -687,7 +728,7 @@ export default class GameScene extends Phaser.Scene {
     this.cab.add([this.doorL, this.doorR]);
 
     // Base con el color elegido (skin del ascensor)
-    const elevColor = getCustomOption('elevator', this.save.custom.elevator).color;
+    const elevColor = elevatorColors(this.save).base;
     const base = this.add.graphics();
     base.fillStyle(elevColor, 1);
     base.fillRoundedRect(-CAB_W / 2, CAB_H / 2 - 24, CAB_W, 24, 10);
@@ -798,6 +839,12 @@ export default class GameScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true });
       if (def.rule === 'ghost') image.setAlpha(0.9);
       container.add([shadow, image]);
+      // Accesorio de monstruo (contenido del Pack Deluxe) si está equipado
+      const acc = monsterAccessory(this, this.save, image.displayWidth);
+      if (acc) {
+        acc.setPosition(0, -image.displayHeight * 0.42);
+        container.add(acc);
+      }
 
       // Insignia de destino con el color del piso
       const badge = this.add.container(0, -38);
@@ -1090,6 +1137,14 @@ export default class GameScene extends Phaser.Scene {
       }
       return true;
     });
+    // Parejas entregadas JUNTAS (se cuenta cada pareja una sola vez, para misiones).
+    const exitIds = new Set(exiters.map((e) => e.id));
+    for (const p of exiters) {
+      const pid = this.coupleOf.get(p.id);
+      if (pid !== undefined && exitIds.has(pid) && p.id < pid && !separated.includes(p)) {
+        this.couplesDelivered += 1;
+      }
+    }
     if (separated.length > 0) {
       const forgiveNow = !this.forgiven;
       if (forgiveNow) this.forgiven = true;
@@ -1142,10 +1197,12 @@ export default class GameScene extends Phaser.Scene {
     });
     this.refreshHud();
 
-    // Desde el nivel 15, cada piso equivocado cuesta un corazón.
-    if (this.level.lives > 0) {
+    // En la campaña un piso equivocado NO cuesta nada: solo afecta las estrellas.
+    // En el Modo Desafío opcional gasta una de las 3 vidas de la partida.
+    this.save.metrics.mistakes += 1;
+    if (this.challenge) {
       this.loseLife('¡Piso equivocado!');
-      if (this.lives <= 0) return; // nivel fallado
+      if (this.lives <= 0) return; // desafío terminado (reintento gratis)
     }
 
     if (this.mistakes >= MAX_MISTAKES) {
@@ -1477,11 +1534,18 @@ export default class GameScene extends Phaser.Scene {
     });
     const restart = makeButton(this, W / 2, H / 2 - 12, 260, 56, 'REINICIAR', {
       bg: COLORS.mintDark, fontSize: 22,
-      onClick: () => { this.paused = false; this.scene.restart({ levelId: this.level.id }); },
+      onClick: () => { this.paused = false; this.scene.restart({ levelId: this.level.id, challenge: this.challenge }); },
     });
     const exit = makeButton(this, W / 2, H / 2 + 61, 260, 56, 'SALIR', {
       bg: COLORS.purple, fontSize: 22,
-      onClick: () => { this.paused = false; this.scene.start('levels'); },
+      onClick: () => {
+        this.paused = false;
+        if (!this.won) {
+          this.save.metrics.quitsMidLevel += 1;
+          writeSave(this.save);
+        }
+        this.scene.start('levels');
+      },
     });
     const rese = makeButton(this, W / 2, H / 2 + 134, 260, 56, 'RESE TE EXPLICA', {
       bg: COLORS.accent, fontSize: 20,
@@ -1592,8 +1656,8 @@ export default class GameScene extends Phaser.Scene {
     this.reseOverlay.on('pointerdown', () => this.reseAdvance());
     this.reseImg = this.add.image(W / 2, H + 280, 'rese').setDepth(68).setVisible(false);
     this.reseImg.setDisplaySize(400, 400);
-    const reseSkin = getCustomOption('rese', this.save.custom.rese);
-    if (reseSkin.id !== 'azul') this.reseImg.setTint(reseSkin.color);
+    this.reseCostume?.destroy();
+    this.reseCostume = decorateRese(this, this.reseImg, this.save) ?? undefined;
     // Caja de diálogo estilo novela visual, abajo.
     this.receptionistBg = this.add.graphics().setDepth(70);
     this.receptionistText = this.add.text(W / 2, 836, '', {
@@ -1635,8 +1699,8 @@ export default class GameScene extends Phaser.Scene {
     if (this.level.couples.length > 0 && !prev.some((l) => l.couples.length > 0)) {
       cards.push({ draw: 'heart', title: '¡PAREJAS ENAMORADAS!', text: 'Los enamorados llevan un corazón. Deben bajar JUNTOS en su piso: si los separas, pierdes 1 estrella.' });
     }
-    if (this.level.lives > 0 && !prev.some((l) => l.lives > 0)) {
-      cards.push({ draw: 'lives', title: '¡CORAZONES DE VIDA!', text: 'Desde hoy tienes 3 corazones. Cada piso equivocado cuesta 1. Si los pierdes todos: esperas, ves un anuncio o activas el premium.' });
+    if (this.level.id === CHALLENGE_UNLOCK_LEVEL) {
+      cards.push({ draw: 'challenge', title: '¡MODO DESAFÍO DISPONIBLE!', text: 'Es OPCIONAL y está separado de la campaña: 3 vidas por partida para quien quiera más dificultad. Tu campaña sigue sin vidas, sin esperas y con reintentos gratis.' });
     }
     if (this.level.enemies.length > 0 && !prev.some((l) => l.enemies.length > 0)) {
       cards.push({ draw: 'grunon', title: '¡MONSTRUOS ENEMIGOS!', text: 'Los enemigos llevan un rayo de enojo. Si viajan juntos, pierdes 1 estrella: ¡sube a uno por viaje!' });
@@ -1685,7 +1749,7 @@ export default class GameScene extends Phaser.Scene {
       c.add(title);
       let icon: Phaser.GameObjects.Container | Phaser.GameObjects.Image | Phaser.GameObjects.Graphics | null = null;
       if (card.draw === 'heart') icon = this.add.image(W / 2, H / 2 - 70, 'heart').setScale(2.2);
-      else if (card.draw === 'lives') {
+      else if (card.draw === 'challenge') {
         icon = this.add.container(W / 2, H / 2 - 70, [-46, 0, 46].map((dx) => this.add.image(dx, 0, 'heart').setScale(1.4)));
       } else if (card.draw === 'grunon') icon = this.add.image(W / 2, H / 2 - 70, 'grunon').setScale(1.5);
       else if (card.draw === 'duo') {
@@ -1775,7 +1839,6 @@ export default class GameScene extends Phaser.Scene {
     let key: string | null = null;
     if (lvl === 1) key = 'tut1';
     else if (lvl === first((l) => l.couples.length > 0)) key = 'tut_couple';
-    else if (lvl === first((l) => l.lives > 0)) key = 'tut_lives';
     else if (lvl === first((l) => l.enemies.length > 0)) key = 'tut_enemies';
     else if (lvl === first((l) => l.passengers.some((p) => MONSTER_MAP[p.m].rule === 'luggage'))) key = 'tut_luggage';
     else if (lvl === first((l) => l.breakdownChance > 0)) key = 'tut_break';
@@ -1881,15 +1944,24 @@ export default class GameScene extends Phaser.Scene {
     // Cada regla rota (pareja separada, enemigos juntos) resta 1 estrella.
     const penalties = this.separations + this.ruleBreaks;
     stars = Math.max(1, stars - penalties);
-    const perfect = isPerfect(effDistance, this.optimal) && penalties === 0;
-    const prevBest = this.save.bestDistance[this.level.id];
-    const record = penalties === 0 && prevBest !== undefined && effDistance < prevBest;
-    this.save.bestDistance[this.level.id] = Math.min(prevBest ?? Infinity, effDistance);
-    const prevStars = this.save.stars[this.level.id] ?? 0;
-    const earned = stars > prevStars ? coinsFor(stars, perfect, record) : 2;
-
-    this.save.stars[this.level.id] = Math.max(prevStars, stars);
-    this.save.coins += earned;
+    // Economía V3: cada logro paga UNA sola vez (primera victoria, estrellas nuevas,
+    // ruta óptima). Repetir un nivel no duplica monedas.
+    const reward = settleLevel(this.save, this.level.id, stars, effDistance, this.optimal, {
+      penalties,
+      mistakes: this.mistakes,
+      couplesDelivered: this.couplesDelivered,
+      challenge: this.challenge,
+    });
+    const perfect = reward.perfect;
+    const record = reward.record;
+    let earned = reward.total;
+    if (this.challenge) {
+      const badge = settleChallenge(this.save, this.level.id);
+      if (badge) {
+        reward.lines.push(badge);
+        earned += badge.coins;
+      }
+    }
     this.save.unlockedLevel = Math.min(
       Math.max(this.save.unlockedLevel, this.level.id + 1),
       TOTAL_LEVELS
@@ -1925,13 +1997,13 @@ export default class GameScene extends Phaser.Scene {
     // Panel beige con sombra y doble borde
     const panel = this.add.graphics();
     panel.fillStyle(0xd4b58c, 0.55);
-    panel.fillRoundedRect(W / 2 - 185 + 7, H / 2 - 268 + 11, 380, 545, 26);
+    panel.fillRoundedRect(W / 2 - 185 + 7, H / 2 - 268 + 11, 380, 585, 26);
     panel.fillStyle(0xfcf5e3, 1);
-    panel.fillRoundedRect(W / 2 - 185, H / 2 - 268, 380, 545, 26);
+    panel.fillRoundedRect(W / 2 - 185, H / 2 - 268, 380, 585, 26);
     panel.lineStyle(4, 0xd4b58c, 1);
-    panel.strokeRoundedRect(W / 2 - 185, H / 2 - 268, 380, 545, 26);
+    panel.strokeRoundedRect(W / 2 - 185, H / 2 - 268, 380, 585, 26);
     panel.lineStyle(3, 0xffffff, 0.85);
-    panel.strokeRoundedRect(W / 2 - 176, H / 2 - 259, 362, 527, 20);
+    panel.strokeRoundedRect(W / 2 - 176, H / 2 - 259, 362, 567, 20);
     c.add(panel);
     c.setScale(0.5).setAlpha(0);
     this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 450, ease: 'Back.easeOut' });
@@ -1998,26 +2070,44 @@ export default class GameScene extends Phaser.Scene {
 
     let banner = '';
     let bannerColor = '#2f9e44';
-    if (record) banner = '¡NUEVO RÉCORD PERSONAL! +150 monedas';
-    else if (perfect) banner = '¡PERFECTO! Ruta óptima: +50 monedas';
     if (penalties > 0) { banner = `Reglas rotas: ${penalties} (-${penalties} estrella)`; bannerColor = '#ef4444'; }
-    if (banner) c.add(makeText(this, W / 2, H / 2 + 34, banner, 16, bannerColor, false));
-    c.add(makeText(this, W / 2, H / 2 + 56, `Ruta óptima: ${this.optimal} pasos`, 14, '#8a6fd0', false));
+    else if (record) banner = '¡NUEVO RÉCORD PERSONAL!';
+    else if (perfect) banner = '¡RUTA ÓPTIMA EXACTA!';
+    else if (reward.firstWin) banner = '¡NIVEL SUPERADO POR PRIMERA VEZ!';
+    if (banner) c.add(makeText(this, W / 2, H / 2 + 34, banner, 15, bannerColor, false));
+    c.add(makeText(this, W / 2, H / 2 + 56, `Ruta óptima: ${this.optimal} pasos`, 13, '#8a6fd0', false));
+    // Desglose honesto de monedas: qué logro pagó y cuánto
+    const detail = reward.lines.length > 0
+      ? reward.lines.map((l) => `${l.label} +${l.coins}`).join('   ·   ')
+      : 'Repetición: cada logro paga una sola vez';
+    c.add(makeText(this, W / 2, H / 2 + 78, detail, 12, '#a06a35', false));
     if (newMonsters.length > 0) {
       const names = newMonsters.map((id) => MONSTER_MAP[id].name).join(', ');
-      c.add(makeText(this, W / 2, H / 2 + 58, `¡Nuevo en el álbum: ${names}!`, 15, '#2f9e44', false));
+      c.add(makeText(this, W / 2, H / 2 + 98, `¡Nuevo en el álbum: ${names}!`, 13, '#2f9e44', false));
+    }
+    // Aviso de misiones listas para cobrar (sin presión: no caducan)
+    const ready = claimableMissions(this.save);
+    if (ready.length > 0) {
+      const total = ready.reduce((a, m) => a + m.def.reward, 0);
+      const mb = makeButton(this, W / 2, H / 2 + 120, 320, 40, `¡MISIÓN LISTA! COBRAR +${total} 🪙`, {
+        bg: COLORS.green, fontSize: 13,
+        onClick: () => { c.destroy(); this.scene.start('missions'); },
+      });
+      c.add(mb);
+      this.tweens.add({ targets: mb, scale: 1.05, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
 
     // Botones 3D jugosos con iconos
     const isLast = this.level.id >= 30;
-    this.juicyButton(c, W / 2, H / 2 + 116, 0xd66200, 0xff9500, isLast ? 'VER NIVELES' : 'SIGUIENTE', 'play', () => {
+    const off = ready.length > 0 ? 34 : 0;
+    this.juicyButton(c, W / 2, H / 2 + 152 + off, 0xd66200, 0xff9500, isLast ? 'VER NIVELES' : 'SIGUIENTE', 'play', () => {
       if (isLast) this.scene.start('levels');
-      else this.scene.restart({ levelId: this.level.id + 1 });
+      else this.scene.restart({ levelId: this.level.id + 1, challenge: this.challenge });
     });
-    this.juicyButton(c, W / 2, H / 2 + 186, 0x1a9c9c, 0x45d1c9, 'REPETIR', 'redo', () => {
-      this.scene.restart({ levelId: this.level.id });
+    this.juicyButton(c, W / 2, H / 2 + 214 + off, 0x1a9c9c, 0x45d1c9, 'REPETIR', 'redo', () => {
+      this.scene.restart({ levelId: this.level.id, challenge: this.challenge });
     });
-    this.juicyButton(c, W / 2, H / 2 + 250, 0x8c5ac8, 0xc495f0, 'NIVELES', 'home', () => {
+    this.juicyButton(c, W / 2, H / 2 + 272 + off, 0x8c5ac8, 0xc495f0, 'NIVELES', 'home', () => {
       this.scene.start('levels');
     });
 
@@ -2026,11 +2116,33 @@ export default class GameScene extends Phaser.Scene {
       const tex = ['sparkle', 'heart', 'star', 'coin'][i % 4];
       const conf = this.add.image(Math.random() * W, -30 - Math.random() * 240, tex)
         .setDepth(101).setScale(0.4 + Math.random() * 0.7);
+      if (goldenCelebration(this.save)) conf.setTint(0xfde68a);
       this.tweens.add({
         targets: conf, y: H + 40, x: conf.x + (Math.random() - 0.5) * 140,
         angle: (Math.random() - 0.5) * 720, duration: 1600 + Math.random() * 1600,
         delay: Math.random() * 700, onComplete: () => conf.destroy(),
       });
+    }
+
+    // Celebración especial dorada (contenido del Pack Deluxe)
+    if (goldenCelebration(this.save)) {
+      for (let burst = 0; burst < 4; burst++) {
+        this.time.delayedCall(300 + burst * 420, () => {
+          const bx = 90 + Math.random() * (W - 180);
+          const by = 160 + Math.random() * 260;
+          for (let r = 0; r < 18; r++) {
+            const a = (r / 18) * Math.PI * 2;
+            const spark = this.add.image(bx, by, 'sparkle').setDepth(105).setScale(0.8)
+              .setTint([0xfde68a, 0xfbbf24, 0xffffff][r % 3]);
+            this.tweens.add({
+              targets: spark, x: bx + Math.cos(a) * 130, y: by + Math.sin(a) * 130,
+              scale: 0.2, alpha: 0, duration: 760, ease: 'Cubic.easeOut',
+              onComplete: () => spark.destroy(),
+            });
+          }
+          audio.star(burst % 3);
+        });
+      }
     }
   }
 

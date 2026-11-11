@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { MONSTER_MAP } from '../src/data/monsters';
-import { computeOptimal, starsFor, starThresholds, coinsFor, isPerfect, moodForMistakes, MAX_MISTAKES } from '../src/systems/scoring';
+import { computeOptimal, starsFor, starThresholds, isPerfect, moodForMistakes, MAX_MISTAKES } from '../src/systems/scoring';
 import { LevelDef } from '../src/data/levels';
 
 const L = (
@@ -23,7 +23,6 @@ const L = (
   capacity,
   passengers: passengers.map(([m, d]) => ({ m, d })),
   timeLimit: 120,
-  lives: 0,
   breakdownChance: 0,
   couples,
   enemies,
@@ -125,10 +124,9 @@ describe('estrellas y monedas', () => {
     expect(isPerfect(9, 10)).toBe(false);
   });
 
-  it('las monedas crecen con las estrellas y el bonus de perfección', () => {
-    expect(coinsFor(3)).toBeGreaterThan(coinsFor(2));
-    expect(coinsFor(2)).toBeGreaterThan(coinsFor(1));
-    expect(coinsFor(3, true)).toBeGreaterThan(coinsFor(3, false));
+  it('las monedas ya no se calculan aquí (Economía V3)', () => {
+    // El pago por logros únicos vive en systems/economy.ts y se prueba en economy.test.ts.
+    expect(isPerfect(5, 5)).toBe(true);
   });
 });
 
@@ -223,7 +221,7 @@ describe('auditoría del óptimo: fuerza bruta independiente vs solver', () => {
   }
 
   const L = (passengers: Array<[string, number]>, floors = 3, capacity = 3, couples: Array<[number, number]> = [], enemies: Array<[number, number]> = []): LevelDef => ({
-    id: 99, title: 'test', floors, capacity, timeLimit: 120, lives: 0, breakdownChance: 0, couples, enemies,
+    id: 99, title: 'test', floors, capacity, timeLimit: 120, breakdownChance: 0, couples, enemies,
     passengers: passengers.map(([m, d]) => ({ m, d })),
   });
 

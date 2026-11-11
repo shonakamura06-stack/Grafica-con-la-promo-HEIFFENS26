@@ -10,7 +10,9 @@ import MenuScene from './scenes/MenuScene';
 import LevelSelectScene from './scenes/LevelSelectScene';
 import GameScene from './scenes/GameScene';
 import AlbumScene from './scenes/AlbumScene';
-import CustomizeScene from './scenes/CustomizeScene';
+import ShopScene from './scenes/ShopScene';
+import MissionsScene from './scenes/MissionsScene';
+import DataScene from './scenes/DataScene';
 import SettingsScene from './scenes/SettingsScene';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -32,7 +34,9 @@ const config: Phaser.Types.Core.GameConfig = {
     LevelSelectScene,
     GameScene,
     AlbumScene,
-    CustomizeScene,
+    ShopScene,
+    MissionsScene,
+    DataScene,
     SettingsScene,
   ],
 };

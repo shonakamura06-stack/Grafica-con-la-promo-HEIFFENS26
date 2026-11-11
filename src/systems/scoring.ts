@@ -292,17 +292,8 @@ export function isPerfect(distance: number, optimal: number): boolean {
   return distance === optimal;
 }
 
-export function coinsFor(stars: number, perfect = false, record = false): number {
-  const base = 6 + stars * 4;
-  if (record) return base + 150; // ¡Batió el récord calculado! ¡Un genio!
-  if (perfect) return base + 50; // Solución óptima exacta.
-  return base;
-}
-
-/** ¿Batió el récord (distancia menor que el óptimo calculado)? */
-export function isRecord(distance: number, optimal: number): boolean {
-  return distance < optimal;
-}
+// Las monedas ya NO se calculan aquí: la Economía V3 las paga por logros únicos
+// (primera victoria, estrellas nuevas, ruta óptima, misiones) en systems/economy.ts.
 
 /**
  * Ánimo de los pasajeros según los pisos equivocados acumulados:

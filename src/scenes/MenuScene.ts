@@ -5,7 +5,9 @@
  */
 
 import Phaser from 'phaser';
-import { loadSave, writeSave, claimDaily, DAILY_COINS, DAILY_HEART } from '../systems/save';
+import { loadSave } from '../systems/save';
+import { claimableMissions } from '../systems/economy';
+import { openParentalGate } from '../systems/parental';
 import { makeButton, makeCoins, makeText, makeWoodSign, makePanel, COLORS } from '../systems/ui';
 import qrcode from 'qrcode-generator';
 import { audio } from '../systems/audio';
@@ -18,12 +20,6 @@ export default class MenuScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.fadeIn(320);
     const save = loadSave();
-    // Regalo diario: una vez por día, monedas + 1 corazón.
-    const today = new Date().toISOString().slice(0, 10);
-    if (claimDaily(save, today)) {
-      writeSave(save);
-      this.time.delayedCall(600, () => this.showDailyGift());
-    }
     audio.ensure();
     this.input.once('pointerdown', () => {
       audio.ensure();
@@ -103,68 +99,59 @@ export default class MenuScene extends Phaser.Scene {
 
     makeCoins(this, W - 70, 34, save.coins);
 
-    // Botones caramelo
+    // Botones caramelo (campaña gratis: sin corazones, sin esperas)
     const cx = W / 2;
-    makeButton(this, cx, 560, 280, 68, '▶  JUGAR', {
+    makeButton(this, cx, 540, 300, 66, '▶  JUGAR', {
       fontSize: 30,
       onClick: () => this.scene.start('levels'),
     });
-    makeButton(this, cx, 640, 280, 56, 'NIVELES', {
-      bg: COLORS.mintDark, fontSize: 22,
+    makeText(this, cx, 588, 'Reintentos ilimitados · sin anuncios · sin pagos para jugar', 12, '#2f9e44', false);
+
+    const ready = claimableMissions(save).length;
+    makeButton(this, cx - 135, 636, 250, 54, 'NIVELES', {
+      bg: COLORS.mintDark, fontSize: 18,
       onClick: () => this.scene.start('levels'),
     });
-    makeButton(this, cx, 706, 280, 56, 'ÁLBUM DE MONSTRUOS', {
-      bg: COLORS.purple, fontSize: 20,
+    const missionsBtn = makeButton(this, cx + 135, 636, 250, 54, 'MISIONES', {
+      bg: COLORS.accent, fontSize: 18,
+      onClick: () => this.scene.start('missions'),
+    });
+    if (ready > 0) {
+      const badge = this.add.circle(cx + 250, 612, 16, 0xef4444).setDepth(20);
+      makeText(this, cx + 250, 612, `${ready}`, 15, '#ffffff').setDepth(21);
+      this.tweens.add({ targets: [badge], scale: 1.25, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: missionsBtn, scale: 1.03, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
+    makeButton(this, cx - 135, 700, 250, 54, 'TIENDA', {
+      bg: COLORS.blue, fontSize: 18,
+      onClick: () => this.scene.start('shop'),
+    });
+    makeButton(this, cx + 135, 700, 250, 54, 'ÁLBUM', {
+      bg: COLORS.purple, fontSize: 18,
       onClick: () => this.scene.start('album'),
     });
-    makeButton(this, cx, 772, 280, 56, 'MI HOTEL', {
-      bg: COLORS.blue, fontSize: 22,
-      onClick: () => this.scene.start('customize'),
-    });
-    makeButton(this, cx, 838, 280, 56, 'AJUSTES', {
-      bg: COLORS.green, fontSize: 22,
+    makeButton(this, cx - 135, 764, 250, 54, 'AJUSTES', {
+      bg: COLORS.green, fontSize: 18,
       onClick: () => this.scene.start('settings'),
+    });
+    makeButton(this, cx + 135, 764, 250, 54, 'DATOS (ADULTOS)', {
+      bg: COLORS.purpleDark, fontSize: 13,
+      onClick: () => openParentalGate(this, {
+        title: 'Datos de juego y balance económico',
+        onPass: () => this.scene.start('data'),
+      }),
     });
 
     // Botón para llevar el juego al celular (solo cuando hay una URL pública).
     const host = window.location.hostname;
     if (host !== 'localhost' && host !== '127.0.0.1') {
-      makeButton(this, cx, 898, 320, 48, 'JUGAR EN TU CELULAR', {
+      makeButton(this, cx, 828, 320, 46, 'JUGAR EN TU CELULAR', {
         bg: COLORS.accent, fontSize: 18,
         onClick: () => this.showQrPanel(),
       });
     }
 
     makeText(this, W / 2, H - 14, 'Un juego de ascensor para toda la familia · v1.0', 13, '#a06a35', false);
-  }
-
-  /** Popup animado del regalo diario. */
-  private showDailyGift(): void {
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const c = this.add.container(0, 0).setDepth(80);
-    const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.5).setOrigin(0).setInteractive();
-    c.add(dim);
-    c.add(makePanel(this, W / 2, H / 2, 400, 380));
-    const t = this.add.text(W / 2, H / 2 - 130, '¡REGALO DIARIO!', {
-      fontFamily: 'Arial Black, Impact, sans-serif', fontSize: '30px', color: '#FDBB2D',
-      stroke: '#6D3A14', strokeThickness: 8,
-    }).setOrigin(0.5);
-    c.add(t);
-    const coin = this.add.image(W / 2 - 70, H / 2 - 20, 'coin').setScale(1.2);
-    const heart = this.add.image(W / 2 - 70, H / 2 + 50, 'heart').setScale(1.1);
-    c.add([coin, heart]);
-    c.add(makeText(this, W / 2 + 30, H / 2 - 20, `+${DAILY_COINS} monedas`, 22, '#6b4423'));
-    c.add(makeText(this, W / 2 + 30, H / 2 + 50, `+${DAILY_HEART} corazón`, 22, '#6b4423'));
-    c.add(makeText(this, W / 2, H / 2 + 130, 'Vuelve mañana por otro · toca para cerrar', 14, '#8a6fd0', false));
-    c.setScale(0.4).setAlpha(0);
-    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 380, ease: 'Back.easeOut' });
-    this.tweens.add({ targets: coin, angle: 360, duration: 1200, repeat: -1, ease: 'Sine.easeInOut' });
-    this.tweens.add({ targets: heart, scale: 1.3, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    dim.on('pointerdown', () => {
-      audio.click();
-      this.tweens.add({ targets: c, scale: 0.7, alpha: 0, duration: 200, onComplete: () => c.destroy() });
-    });
   }
 
   /** Panel con código QR de la URL pública para abrir el juego en el celular. */
