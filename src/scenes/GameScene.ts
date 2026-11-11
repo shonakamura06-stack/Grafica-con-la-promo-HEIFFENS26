@@ -21,7 +21,7 @@ import Phaser from 'phaser';
 import { getLevel, LevelDef, TOTAL_LEVELS } from '../data/levels';
 import { MONSTER_MAP, MonsterDef, TWIN_GROUP, Mood, floorColor } from '../data/monsters';
 import { loadSave, writeSave, SaveData, getCustomOption } from '../systems/save';
-import { computeOptimal, starsFor, starThresholds, coinsFor, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
+import { computeOptimal, starsFor, coinsFor, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
 
@@ -44,16 +44,22 @@ interface Passenger {
 
 const W = 540;
 const H = 960;
-const BUILD_LEFT = 16;
-const BUILD_RIGHT = 376;
-const BUILD_TOP = 118;
-const LOBBY_TOP = 640;
-const BUILD_BOTTOM = 760;
-const CAB_X = 210;
-const CAB_W = 150;
-const CAB_H = 96;
-const SHAFT_LEFT = CAB_X - CAB_W / 2 - 8;
-const SHAFT_RIGHT = CAB_X + CAB_W / 2 + 8;
+// Layout en 4 columnas de 135px:
+// - Columnas 1-2 (x 0-270): edificio con ventanas y balcones
+// - Columna 3 (x 270-405): ascensor de cristal
+// - Columna 4 (x 405-540): tablero de pisos
+const BUILD_LEFT = 12;
+const BUILD_RIGHT = 258;
+const BUILD_TOP = 130;
+const LOBBY_TOP = 700; // la planta baja (piso 0) empieza aquí
+const BUILD_BOTTOM = 780;
+const CAB_X = 337; // centro de la columna 3
+const CAB_W = 100;
+const CAB_H = 90;
+const SHAFT_LEFT = 284;
+const SHAFT_RIGHT = 390;
+const PANEL_X = 470; // centro de la columna 4
+const QUEUE_CX = 135; // centro de la zona de cola (columnas 1-2)
 
 export default class GameScene extends Phaser.Scene {
   private level!: LevelDef;
@@ -119,7 +125,7 @@ export default class GameScene extends Phaser.Scene {
     return LOBBY_TOP - (f - 1) * this.fh();
   }
   private cabY(f: number): number {
-    return this.bandBottom(f) - CAB_H / 2 - 4;
+    return this.bandBottom(f) - CAB_H / 2 - 2;
   }
   private usedSlots(): number {
     return this.passengers
@@ -212,7 +218,6 @@ export default class GameScene extends Phaser.Scene {
   // ── Hotel kawaii (2.5D) ──────────────────────────────────────────────────
   private drawHotel(): void {
     const wallpaper = getCustomOption('wallpaper', this.save.custom.wallpaper).color;
-    const carpet = getCustomOption('carpet', this.save.custom.carpet).color;
     const N = this.level.floors;
     const fh = this.fh();
     const V = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
@@ -220,212 +225,101 @@ export default class GameScene extends Phaser.Scene {
     const g = this.add.graphics();
     // Sombra del edificio
     g.fillStyle(0x000000, 0.1);
-    g.fillRoundedRect(BUILD_LEFT + 7, BUILD_TOP + 9, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 16);
+    g.fillRoundedRect(BUILD_LEFT + 6, BUILD_TOP + 8, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 14);
     // Techo en 3D: cara superior en perspectiva + franja frontal rosa
     g.fillStyle(0xfbcfe8, 1);
-    g.fillPoints([V(BUILD_LEFT, BUILD_TOP), V(BUILD_RIGHT, BUILD_TOP), V(BUILD_RIGHT + 12, BUILD_TOP - 14), V(BUILD_LEFT + 12, BUILD_TOP - 14)], true);
+    g.fillPoints([V(BUILD_LEFT, BUILD_TOP), V(BUILD_RIGHT, BUILD_TOP), V(BUILD_RIGHT + 10, BUILD_TOP - 12), V(BUILD_LEFT + 10, BUILD_TOP - 12)], true);
     g.fillStyle(0xf9a8d4, 1);
-    g.fillRoundedRect(BUILD_LEFT - 2, BUILD_TOP - 10, BUILD_RIGHT - BUILD_LEFT + 4, 16, 8);
+    g.fillRoundedRect(BUILD_LEFT - 2, BUILD_TOP - 9, BUILD_RIGHT - BUILD_LEFT + 4, 14, 7);
     g.fillStyle(0xffffff, 0.5);
-    g.fillRect(BUILD_LEFT + 4, BUILD_TOP - 8, BUILD_RIGHT - BUILD_LEFT - 8, 4);
+    g.fillRect(BUILD_LEFT + 4, BUILD_TOP - 7, BUILD_RIGHT - BUILD_LEFT - 8, 4);
     // Fachada crema
     g.fillStyle(wallpaper, 1);
-    g.fillRoundedRect(BUILD_LEFT, BUILD_TOP, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 16);
+    g.fillRoundedRect(BUILD_LEFT, BUILD_TOP, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 14);
     // Pared lateral derecha (profundidad)
-    g.fillStyle(0x000000, 0.1);
-    g.fillPoints([V(BUILD_RIGHT - 18, BUILD_TOP + 10), V(BUILD_RIGHT, BUILD_TOP + 10), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 18, BUILD_BOTTOM)], true);
+    g.fillStyle(0x000000, 0.08);
+    g.fillPoints([V(BUILD_RIGHT - 14, BUILD_TOP + 8), V(BUILD_RIGHT, BUILD_TOP + 8), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 14, BUILD_BOTTOM)], true);
     // Zócalo inferior
     g.fillStyle(0xf5d9a8, 1);
-    g.fillRect(BUILD_LEFT, BUILD_BOTTOM - 14, BUILD_RIGHT - BUILD_LEFT, 14);
+    g.fillRect(BUILD_LEFT, BUILD_BOTTOM - 12, BUILD_RIGHT - BUILD_LEFT, 12);
 
-    // ── Lobby en 3D: techo, paredes, ventanales y suelo en perspectiva ──
-    const ceilY = LOBBY_TOP;
-    const backY = LOBBY_TOP + 24;
-    const backBotY = BUILD_BOTTOM - 24;
-    // Techo en perspectiva con luces empotradas
-    g.fillStyle(0xf5e6c8, 1);
-    g.fillPoints([V(BUILD_LEFT, ceilY), V(BUILD_RIGHT, ceilY), V(BUILD_RIGHT - 24, backY), V(BUILD_LEFT + 24, backY)], true);
-    for (const lx of [90, 170, 250, 330]) {
-      g.fillStyle(0xfff3d6, 0.5);
-      g.fillEllipse(lx, ceilY + 9, 26, 10);
-      g.fillStyle(0xffffff, 1);
-      g.fillEllipse(lx, ceilY + 8, 16, 6);
-    }
-    // Pared izquierda en perspectiva con ventanas
-    g.fillStyle(0xd9a066, 1);
-    g.fillPoints([V(BUILD_LEFT, ceilY), V(BUILD_LEFT + 24, backY), V(BUILD_LEFT + 24, backBotY), V(BUILD_LEFT, BUILD_BOTTOM)], true);
-    g.fillStyle(0xffffff, 1);
-    g.fillRoundedRect(BUILD_LEFT + 3, ceilY + 34, 16, 26, 3);
-    g.fillRoundedRect(BUILD_LEFT + 3, ceilY + 66, 16, 26, 3);
-    g.fillStyle(0xbfe8ff, 1);
-    g.fillRect(BUILD_LEFT + 5, ceilY + 36, 12, 22);
-    g.fillRect(BUILD_LEFT + 5, ceilY + 68, 12, 22);
-    // Pared derecha en perspectiva
-    g.fillStyle(0xc98f5a, 1);
-    g.fillPoints([V(BUILD_RIGHT, ceilY), V(BUILD_RIGHT - 24, backY), V(BUILD_RIGHT - 24, backBotY), V(BUILD_RIGHT, BUILD_BOTTOM)], true);
-    g.fillStyle(0xffffff, 1);
-    g.fillRoundedRect(BUILD_RIGHT - 19, ceilY + 40, 14, 24, 3);
-    g.fillStyle(0xbfe8ff, 1);
-    g.fillRect(BUILD_RIGHT - 17, ceilY + 42, 10, 20);
-    // Ventanales posteriores con vista al exterior
-    g.fillStyle(0xbfe8ff, 0.9);
-    g.fillRect(BUILD_LEFT + 24, backY, BUILD_RIGHT - BUILD_LEFT - 48, backBotY - backY);
-    g.fillStyle(0x9fe8b0, 1);
-    g.fillRect(BUILD_LEFT + 24, backBotY - 20, BUILD_RIGHT - BUILD_LEFT - 48, 20);
-    const trees: Array<[number, number]> = [[80, backBotY - 26], [170, backBotY - 22], [290, backBotY - 24]];
-    for (const [tx, ty] of trees) {
-      g.fillStyle(0x7c4f24, 1);
-      g.fillRect(tx - 3, ty, 6, 14);
-      g.fillStyle(0x4ade80, 1);
-      g.fillCircle(tx, ty - 8, 11);
-      g.fillCircle(tx - 8, ty - 2, 7);
-      g.fillCircle(tx + 8, ty - 2, 7);
-    }
-    const houses: Array<[number, number, number]> = [[120, backBotY - 24, 0xfbcfe8], [230, backBotY - 20, 0xbfdbfe], [310, backBotY - 24, 0xfde68a]];
-    for (const [hx, hy, hc] of houses) {
-      g.fillStyle(hc, 1);
-      g.fillRoundedRect(hx, hy, 30, 22, 4);
-      g.fillTriangle(hx - 3, hy, hx + 33, hy, hx + 15, hy - 12);
-    }
-    g.lineStyle(4, 0xffffff, 0.95);
-    g.strokeRect(BUILD_LEFT + 24, backY, BUILD_RIGHT - BUILD_LEFT - 48, backBotY - backY);
-    g.lineStyle(3, 0xffffff, 0.8);
-    for (let i = 1; i < 4; i++) {
-      const vx = BUILD_LEFT + 24 + ((BUILD_RIGHT - BUILD_LEFT - 48) / 4) * i;
-      g.lineBetween(vx, backY, vx, backBotY);
-    }
-    g.lineBetween(BUILD_LEFT + 24, backY + (backBotY - backY) / 2, BUILD_RIGHT - 24, backY + (backBotY - backY) / 2);
-    // Suelo del lobby en perspectiva con baldosas que convergen
-    g.fillStyle(carpet, 1);
-    g.fillPoints([V(BUILD_LEFT, BUILD_BOTTOM), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 24, backBotY), V(BUILD_LEFT + 24, backBotY)], true);
-    g.lineStyle(2, 0xa06a35, 0.3);
-    for (let i = 0; i <= 6; i++) {
-      const bx = BUILD_LEFT + 24 + ((BUILD_RIGHT - BUILD_LEFT - 48) / 6) * i;
-      const fx = BUILD_LEFT + ((BUILD_RIGHT - BUILD_LEFT) / 6) * i;
-      g.lineBetween(bx, backBotY, fx, BUILD_BOTTOM);
-    }
-    g.lineBetween(BUILD_LEFT + 18, backBotY + 8, BUILD_RIGHT - 18, backBotY + 8);
-    g.lineBetween(BUILD_LEFT + 10, backBotY + 16, BUILD_RIGHT - 10, backBotY + 16);
-    // Banco del lobby con volumen
-    this.drawBench3D(g, BUILD_LEFT + 14, backBotY - 22, 88);
+    // Bandas de pisos: dos ventanas con balcón por piso + banner numerado
+    for (let f = 1; f <= N; f++) {
+      const top = this.bandBottom(f) - fh;
+      const color = floorColor(f);
+      g.fillStyle(0xffffff, 0.22);
+      g.fillRect(BUILD_LEFT + 6, top, BUILD_RIGHT - BUILD_LEFT - 12, fh);
+      g.fillStyle(0xf5d9a8, 1);
+      g.fillRect(BUILD_LEFT + 6, top, BUILD_RIGHT - BUILD_LEFT - 12, 5);
+      g.fillStyle(0x000000, 0.05);
+      g.fillRect(BUILD_LEFT + 6, top + 5, BUILD_RIGHT - BUILD_LEFT - 12, 6);
 
-    // ── Torre de cristal del ascensor (con profundidad) ──
-    g.fillGradientStyle(0xeaf7ff, 0xeaf7ff, 0xbfe8ff, 0xbfe8ff, 0.55, 0.55, 0.35, 0.35);
-    g.fillRect(SHAFT_LEFT, BUILD_TOP + 6, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 6);
+      this.drawWindowBalcony(g, BUILD_LEFT + 26, top + fh * 0.18, f % 2 === 1, color);
+      this.drawWindowBalcony(g, BUILD_LEFT + 140, top + fh * 0.18, f % 2 === 1, color);
+      this.drawBanner(g, BUILD_LEFT + 108, top + 6, f, color);
+    }
+
+    // ── Planta baja (piso 0): recepción ──
+    const deskX = BUILD_LEFT + 18, deskY = LOBBY_TOP + 34;
+    g.fillStyle(0x000000, 0.1);
+    g.fillEllipse(deskX + 55, deskY + 44, 110, 12);
+    g.fillStyle(0x7c4f24, 1);
+    g.fillRoundedRect(deskX, deskY + 4, 110, 40, 8);
+    g.fillStyle(0xa06a35, 1);
+    g.fillRoundedRect(deskX - 4, deskY - 2, 118, 12, 6);
+    // Cartel de recepción sobre el mostrador
+    g.fillStyle(0xa06a35, 1);
+    g.fillRoundedRect(deskX + 4, deskY - 26, 102, 20, 7);
+    g.lineStyle(2, 0x7c4f24, 1);
+    g.strokeRoundedRect(deskX + 4, deskY - 26, 102, 20, 7);
+    makeText(this, deskX + 55, deskY - 16, 'RECEPCIÓN', 12, '#ffffff');
+    // Recepcionista (Moco) asomando tras el mostrador
+    const receptionist = this.add.image(deskX + 55, deskY - 18, 'monster-moco').setScale(0.4);
+    this.tweens.add({ targets: receptionist, y: deskY - 24, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    // Planta decorativa
+    g.fillStyle(0xe07b2a, 1);
+    g.fillRoundedRect(deskX + 150, deskY - 8, 14, 14, 3);
+    g.fillStyle(0x4ade80, 1);
+    g.fillCircle(deskX + 157, deskY - 14, 8);
+
+    // ── Torre de cristal del ascensor (columna 3) ──
+    g.fillGradientStyle(0xeaf7ff, 0xeaf7ff, 0xbfe8ff, 0xbfe8ff, 0.5, 0.5, 0.3, 0.3);
+    g.fillRect(SHAFT_LEFT, BUILD_TOP + 4, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 4);
     g.fillStyle(0xffffff, 0.25);
-    g.fillRect(SHAFT_LEFT + 10, BUILD_TOP + 6, 14, BUILD_BOTTOM - BUILD_TOP - 6);
+    g.fillRect(SHAFT_LEFT + 8, BUILD_TOP + 4, 10, BUILD_BOTTOM - BUILD_TOP - 4);
     g.lineStyle(4, 0x5a7a8a, 0.8);
     for (let f = 1; f <= N; f++) {
       g.lineBetween(SHAFT_LEFT, this.bandBottom(f), SHAFT_RIGHT, this.bandBottom(f));
     }
     g.lineStyle(3, 0x5a7a8a, 0.5);
-    g.lineBetween(CAB_X - 62, BUILD_TOP + 6, CAB_X - 62, BUILD_BOTTOM);
-    g.lineBetween(CAB_X + 62, BUILD_TOP + 6, CAB_X + 62, BUILD_BOTTOM);
-    g.lineBetween(CAB_X, BUILD_TOP + 6, CAB_X, BUILD_BOTTOM);
+    g.lineBetween(CAB_X, BUILD_TOP + 4, CAB_X, BUILD_BOTTOM);
     g.lineStyle(4, 0x5a7a8a, 1);
-    g.strokeRect(SHAFT_LEFT, BUILD_TOP + 6, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 6);
+    g.strokeRect(SHAFT_LEFT, BUILD_TOP + 4, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 4);
     g.fillStyle(0x8a7a5a, 1);
-    g.fillRoundedRect(SHAFT_LEFT - 6, BUILD_TOP - 2, SHAFT_RIGHT - SHAFT_LEFT + 12, 12, 5);
+    g.fillRoundedRect(SHAFT_LEFT - 5, BUILD_TOP - 2, SHAFT_RIGHT - SHAFT_LEFT + 10, 11, 5);
     // Nube dentro de la torre
-    const shaftCloud = this.add.image(CAB_X, BUILD_TOP + 40, 'cloud').setScale(0.5).setAlpha(0.9);
-    this.tweens.add({ targets: shaftCloud, y: BUILD_TOP + 48, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const shaftCloud = this.add.image(CAB_X, BUILD_TOP + 34, 'cloud').setScale(0.42).setAlpha(0.9);
+    this.tweens.add({ targets: shaftCloud, y: BUILD_TOP + 42, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    // Bandas de pisos: barandillas de colores, ventanas y banners
-    for (let f = 1; f <= N; f++) {
-      const top = this.bandBottom(f) - fh;
-      const color = floorColor(f);
-      g.fillStyle(0xffffff, 0.25);
-      g.fillRect(BUILD_LEFT + 8, top, BUILD_RIGHT - BUILD_LEFT - 16, fh);
-      g.fillStyle(0xf5d9a8, 1);
-      g.fillRect(BUILD_LEFT + 8, top, BUILD_RIGHT - BUILD_LEFT - 16, 5);
-      g.fillStyle(0x000000, 0.05);
-      g.fillRect(BUILD_LEFT + 8, top + 5, BUILD_RIGHT - BUILD_LEFT - 16, 7);
-
-      this.drawWindow(g, BUILD_LEFT + 30, top + fh * 0.22, f % 2 === 1);
-      this.drawWindow(g, BUILD_RIGHT - 74, top + fh * 0.22, f % 2 === 1);
-      this.drawRailing(g, BUILD_LEFT + 24, top + fh * 0.68, 96, color);
-      this.drawRailing(g, BUILD_RIGHT - 94, top + fh * 0.68, 70, color);
-
-      // Marco de puerta del piso en la torre
-      g.fillStyle(0xffffff, 0.85);
-      g.fillRoundedRect(SHAFT_LEFT - 4, top + 6, SHAFT_RIGHT - SHAFT_LEFT + 8, fh - 10, 6);
-      // Banner con el número del piso colgado de la ventana
-      this.drawBanner(g, BUILD_LEFT + 32, top + fh * 0.22 - 2, f, color);
-    }
-    // Ventanas redondas en el piso superior
-    this.drawRoundWindow(g, BUILD_LEFT + 48, BUILD_TOP + 26);
-    this.drawRoundWindow(g, BUILD_RIGHT - 48, BUILD_TOP + 26);
-    // Nubecita asomada en una barandilla
-    const midFloor = Math.max(1, Math.floor(N / 2));
-    const peek = this.add.image(BUILD_LEFT + 72, this.bandBottom(midFloor) - fh * 0.68 - 4, 'cloud').setScale(0.42);
-    this.tweens.add({ targets: peek, y: peek.y - 5, duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-    // ── Recepción (fuera del edificio, a la derecha) ──
-    const deskX = 404, deskY = 692;
-    g.fillStyle(0x000000, 0.12);
-    g.fillEllipse(deskX + 56, deskY + 68, 120, 14);
-    g.fillStyle(0x7c4f24, 1);
-    g.fillRoundedRect(deskX, deskY + 8, 112, 56, 8);
-    g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(deskX - 4, deskY, 120, 14, 6);
-    // Planta y monitor sobre el mostrador
-    g.fillStyle(0xe07b2a, 1);
-    g.fillRoundedRect(deskX + 8, deskY - 14, 14, 14, 3);
-    g.fillStyle(0x4ade80, 1);
-    g.fillCircle(deskX + 15, deskY - 20, 8);
-    g.fillStyle(0x241640, 1);
-    g.fillRoundedRect(deskX + 88, deskY - 20, 20, 16, 3);
-    g.fillStyle(0x9fd8ff, 1);
-    g.fillRect(deskX + 91, deskY - 17, 14, 10);
-    // Cartel de recepción
-    g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(deskX + 6, deskY - 58, 100, 24, 8);
-    g.lineStyle(2, 0x7c4f24, 1);
-    g.strokeRoundedRect(deskX + 6, deskY - 58, 100, 24, 8);
-    makeText(this, deskX + 56, deskY - 46, 'RECEPCIÓN', 13, '#ffffff');
-    // Recepcionista (Moco) saludando tras el mostrador
-    const receptionist = this.add.image(deskX + 56, deskY - 26, 'monster-moco').setScale(0.5);
-    this.tweens.add({ targets: receptionist, y: deskY - 32, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-    // ── Zona de cola: suelo de baldosas en perspectiva ──
+    // ── Zona de cola: suelo de baldosas en perspectiva (frente al edificio) ──
     g.fillStyle(0xfff3d6, 1);
-    g.fillRoundedRect(8, 786, W - 16, 164, 16);
+    g.fillRoundedRect(8, 792, BUILD_RIGHT - 4, 162, 14);
     g.lineStyle(2, 0xe8cfa0, 0.8);
-    for (let i = -3; i <= 3; i++) {
-      g.lineBetween(W / 2 + i * 95, 946, W / 2 + i * 58, 790);
+    for (let i = -2; i <= 2; i++) {
+      g.lineBetween(QUEUE_CX + i * 60, 950, QUEUE_CX + i * 38, 796);
     }
-    for (const ty of [812, 848, 890, 934]) {
-      g.lineBetween(12, ty, W - 12, ty);
+    for (const ty of [826, 864, 908]) {
+      g.lineBetween(12, ty, BUILD_RIGHT - 4, ty);
     }
-    this.drawBench3D(g, 18, 896, 100);
-    this.drawBench3D(g, W - 118, 896, 100);
     const flowerColors = [0xf472b6, 0xffc93c, 0xffffff, 0xf87171, 0xc084fc];
-    for (let i = 0; i < 8; i++) {
-      const fx = 140 + i * 36;
-      const fy = 936 + (i % 2) * 8;
-      this.drawFlower(g, fx, fy, flowerColors[i % flowerColors.length]);
+    for (let i = 0; i < 5; i++) {
+      this.drawFlower(g, 150 + i * 22, 946, flowerColors[i % flowerColors.length]);
     }
   }
 
-  /** Banco de madera con volumen (respaldo, asiento, patas y sombra). */
-  private drawBench3D(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number): void {
-    g.fillStyle(0x000000, 0.12);
-    g.fillEllipse(x + w / 2, y + 36, w, 10);
-    g.fillStyle(0x7c4f24, 1);
-    g.fillRect(x + 6, y + 22, 7, 14);
-    g.fillRect(x + w - 13, y + 22, 7, 14);
-    g.fillStyle(0xc98f4e, 1);
-    g.fillRoundedRect(x, y + 16, w, 8, 3);
-    g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(x, y + 20, w, 8, 3);
-    g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(x, y, w, 18, 4);
-    g.fillStyle(0xc98f4e, 1);
-    g.fillRoundedRect(x + 3, y + 2, w - 6, 6, 3);
-  }
-
-  private drawWindow(g: Phaser.GameObjects.Graphics, x: number, y: number, lit: boolean): void {
-    const w = 44, h = 38;
+  /** Ventana con balcón (losa + barandilla del color del piso). */
+  private drawWindowBalcony(g: Phaser.GameObjects.Graphics, x: number, y: number, lit: boolean, color: number): void {
+    const w = 52, h = 44;
     g.fillStyle(0xffffff, 1);
     g.fillRoundedRect(x - 3, y - 3, w + 6, h + 6, 6);
     if (lit) {
@@ -438,18 +332,11 @@ export default class GameScene extends Phaser.Scene {
     g.fillTriangle(x + 6, y + h, x + 16, y, x + 26, y);
     g.fillStyle(0xffffff, 0.6);
     g.fillRect(x + w / 2 - 1, y, 2, h);
-  }
-
-  private drawRoundWindow(g: Phaser.GameObjects.Graphics, x: number, y: number): void {
-    g.fillStyle(0xffffff, 1);
-    g.fillCircle(x, y, 20);
-    g.fillStyle(0xbfe8ff, 1);
-    g.fillCircle(x, y, 15);
-    g.fillStyle(0xffffff, 0.5);
-    g.fillCircle(x - 5, y - 5, 5);
-    g.lineStyle(2, 0xa06a35, 0.7);
-    g.lineBetween(x - 15, y, x + 15, y);
-    g.lineBetween(x, y - 15, x, y + 15);
+    // Balcón
+    const by = y + h + 4;
+    g.fillStyle(0xd8cdb4, 1);
+    g.fillRoundedRect(x - 6, by, w + 12, 6, 3);
+    this.drawRailing(g, x - 6, by + 6, w + 12, color);
   }
 
   private drawRailing(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, color: number): void {
@@ -509,22 +396,22 @@ export default class GameScene extends Phaser.Scene {
       this.openPause();
     });
 
-    // Cartel de madera del nivel
-    makeWoodSign(this, W / 2, 44, 330, 74);
-    makeText(this, W / 2, 22, `Nivel ${this.level.id} · ${this.level.title}`, 19, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.35)', 3, true, true);
-    this.progressText = makeText(this, W / 2, 46, '', 14, '#ffe8c2', false);
-    this.distText = makeText(this, W / 2, 66, '', 14, '#ffffff', false);
+    // Cartel de madera del nivel (izquierda, sin tocar la placa de paciencia)
+    makeWoodSign(this, 228, 44, 296, 74);
+    makeText(this, 228, 22, `Nivel ${this.level.id} · ${this.level.title}`, 18, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.35)', 3, true, true);
+    this.progressText = makeText(this, 228, 46, '', 14, '#ffe8c2', false);
+    this.distText = makeText(this, 228, 66, '', 14, '#ffffff', false);
 
     // Placa de paciencia con estrellas (arriba a la derecha)
     const sg = this.add.graphics();
     sg.fillStyle(0x7c4f24, 1);
-    sg.fillRoundedRect(W - 118, 8, 110, 54, 12);
+    sg.fillRoundedRect(W - 150, 8, 142, 54, 12);
     sg.fillStyle(0xfff3d6, 1);
-    sg.fillRoundedRect(W - 114, 12, 102, 46, 10);
-    makeText(this, W - 63, 22, 'PACIENCIA', 10, '#a06a35', false);
+    sg.fillRoundedRect(W - 146, 12, 134, 46, 10);
+    makeText(this, W - 79, 22, 'PACIENCIA', 10, '#a06a35', false);
     this.patienceStars = [];
     for (let i = 0; i < MAX_MISTAKES; i++) {
-      const s = this.add.image(W - 96 + i * 34, 44, 'star').setScale(0.5);
+      const s = this.add.image(W - 116 + i * 36, 44, 'star').setScale(0.5);
       this.patienceStars.push(s);
     }
   }
@@ -540,21 +427,21 @@ export default class GameScene extends Phaser.Scene {
     // Panel crema con borde de madera
     const g = this.add.graphics();
     g.fillStyle(0x000000, 0.12);
-    g.fillRoundedRect(396, 110, 128, 470, 16);
+    g.fillRoundedRect(414, 112, 116, 676, 16);
     g.fillStyle(0xfff3d6, 1);
-    g.fillRoundedRect(392, 104, 128, 470, 16);
+    g.fillRoundedRect(410, 106, 116, 676, 16);
     g.lineStyle(5, 0xa06a35, 1);
-    g.strokeRoundedRect(392, 104, 128, 470, 16);
-    makeText(this, 456, 122, 'ASCENSOR', 15, '#a06a35');
-    this.panelFloorText = makeText(this, 456, 142, 'Piso: 0', 14, '#e07b2a', false);
+    g.strokeRoundedRect(410, 106, 116, 676, 16);
+    makeText(this, PANEL_X, 122, 'ASCENSOR', 15, '#a06a35');
+    this.panelFloorText = makeText(this, PANEL_X, 142, 'Piso: 0', 14, '#e07b2a', false);
 
     const floors: number[] = [];
     for (let f = N; f >= 1; f--) floors.push(f);
     floors.push(0);
-    floors.forEach((f, i) => {
-      const x = 456;
-      const y = 176 + i * 56;
-      const w = 104, h = 46;
+    floors.forEach((f) => {
+      const x = PANEL_X;
+      const y = this.panelButtonY(f);
+      const w = 104, h = 58;
       const bg = this.add.graphics();
       const badgeBg = this.add.graphics();
       const badge = makeText(this, x + w / 2 - 12, y - h / 2 + 10, '', 13, '#6b4423');
@@ -714,8 +601,8 @@ export default class GameScene extends Phaser.Scene {
       const row = rows === 1 ? 0 : Math.floor(i / perRow);
       const idxInRow = rows === 1 ? i : i % perRow;
       const countInRow = rows === 1 ? n : Math.min(perRow, n - row * perRow);
-      const x = W / 2 + (idxInRow - (countInRow - 1) / 2) * 64;
-      const y = rows === 1 ? 892 : 858 + row * 64;
+      const x = QUEUE_CX + (idxInRow - (countInRow - 1) / 2) * 46;
+      const y = rows === 1 ? 872 : 842 + row * 56;
       positions.push({ x, y });
     }
     return positions;
@@ -743,11 +630,11 @@ export default class GameScene extends Phaser.Scene {
   private slotPosition(index: number): { x: number; y: number } {
     const cap = this.level.capacity;
     const slotsX: Record<number, number[]> = {
-      3: [-46, 0, 46],
-      4: [-54, -18, 18, 54],
+      3: [-28, 0, 28],
+      4: [-33, -11, 11, 33],
     };
-    const xs = slotsX[cap] ?? [-46, 0, 46];
-    return { x: xs[Math.min(index, xs.length - 1)], y: 14 };
+    const xs = slotsX[cap] ?? [-28, 0, 28];
+    return { x: xs[Math.min(index, xs.length - 1)], y: 12 };
   }
 
   // ── Interacción ──────────────────────────────────────────────────────────
@@ -758,14 +645,14 @@ export default class GameScene extends Phaser.Scene {
     if (p.state === 'queue') {
       if (this.elevatorFloor !== 0) {
         audio.error();
-        this.showBubble('¡Primero vuelve a recepción!', CAB_X, 640);
+        this.showBubble('¡Primero vuelve a recepción!', CAB_X, this.cab.y - 90);
         return;
       }
       if (!this.doorsOpen) return;
       const onboard = this.onboard();
       if (p.def.rule === 'shy' && onboard.length > 0) {
         audio.error();
-        this.showBubble('Sombrín quiere viajar solo', CAB_X, 640);
+        this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
         return;
       }
       if (onboard.some((o) => o.def.rule === 'shy')) {
@@ -775,7 +662,7 @@ export default class GameScene extends Phaser.Scene {
       }
       if (this.usedSlots() + p.slots > this.level.capacity) {
         audio.error();
-        this.showBubble('¡Ascensor lleno!', CAB_X, 640);
+        this.showBubble('¡Ascensor lleno!', CAB_X, this.cab.y - 90);
         return;
       }
       this.board(p);
@@ -818,6 +705,7 @@ export default class GameScene extends Phaser.Scene {
 
   private leaveToQueue(p: Passenger): void {
     p.state = 'queue';
+    p.asleep = false;
     audio.deselect();
     p.container.setDepth(10);
     p.badge.setScale(1);
@@ -835,7 +723,7 @@ export default class GameScene extends Phaser.Scene {
     const onboard = this.onboard();
     if (onboard.length === 0 && f !== 0) {
       audio.error();
-      this.showBubble('¡Sube monstruos primero!', CAB_X, 640);
+      this.showBubble('¡Sube monstruos primero!', CAB_X, this.cab.y - 90);
       return;
     }
     this.travelTo(f);
@@ -944,7 +832,7 @@ export default class GameScene extends Phaser.Scene {
   /** Los monstruos molestos se bajan en recepción y vuelven a la cola. */
   private grumpyExit(): void {
     audio.grumpy();
-    this.showBubble('¡Se bajaron molestos! Sube a otros monstruos.', CAB_X, 640, 2200);
+    this.showBubble('¡Se bajaron molestos! Sube a otros monstruos.', CAB_X, this.cab.y - 90, 2200);
     this.onboard().slice().forEach((p, i) => {
       this.time.delayedCall(i * 260, () => {
         this.leaveToQueue(p);
@@ -961,8 +849,8 @@ export default class GameScene extends Phaser.Scene {
     audio.happy();
     p.container.setDepth(20);
     p.badge.setVisible(false);
-    const exitX = BUILD_RIGHT - 58;
-    const exitY = this.bandBottom(this.elevatorFloor) - 28;
+    const exitX = p.id % 2 === 0 ? BUILD_LEFT + 58 : BUILD_LEFT + 172;
+    const exitY = this.bandBottom(this.elevatorFloor) - 30;
     this.tweens.add({ targets: p.container, angle: 7, duration: 110, yoyo: true, repeat: 4 });
     this.tweens.add({ targets: p.container, scaleY: 0.9, duration: 110, yoyo: true, repeat: 4 });
     this.tweens.add({
@@ -1024,8 +912,7 @@ export default class GameScene extends Phaser.Scene {
 
   // ── HUD / pistas / burbujas / efectos ────────────────────────────────────
   private refreshHud(): void {
-    const { three } = starThresholds(this.optimal);
-    this.distText.setText(`Distancia ${this.distance} · Óptima ${this.optimal} · Meta ★★★ ≤ ${three}`);
+    this.distText.setText(`Distancia ${this.distance} · Óptima ${this.optimal}`);
     this.progressText.setText(`Entregados ${this.delivered}/${this.passengers.length} · Ascensor ${this.usedSlots()}/${this.level.capacity}`);
     this.refreshPatience();
   }
@@ -1035,9 +922,9 @@ export default class GameScene extends Phaser.Scene {
     this.floorButtons.forEach((btn, f) => {
       const count = onboard.filter((p) => p.dest === f).length;
       const isCurrent = f === this.elevatorFloor;
-      const x = 456;
-      const y = 176 + this.floorIndex(f) * 56;
-      const w = 104, h = 46;
+      const x = PANEL_X;
+      const y = this.panelButtonY(f);
+      const w = 104, h = 58;
       btn.g.clear();
       btn.g.fillStyle(0x000000, 0.12);
       btn.g.fillRoundedRect(x - w / 2, y - h / 2 + 3, w, h, 12);
@@ -1071,6 +958,12 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  /** Y del botón de un piso en el tablero (alineado con el edificio). */
+  private panelButtonY(f: number): number {
+    if (f === 0) return 740;
+    return this.bandBottom(f) - this.fh() / 2;
+  }
+
   private floorIndex(f: number): number {
     const floors: number[] = [];
     for (let x = this.level.floors; x >= 1; x--) floors.push(x);
@@ -1084,30 +977,30 @@ export default class GameScene extends Phaser.Scene {
     const queueCount = this.passengers.filter((p) => p.state === 'queue').length;
     if (this.level.id === 1) {
       if (this.onboard().length === 0 && this.elevatorFloor === 0 && this.delivered === 0) {
-        this.showBubble('¡Púlsalos para que entren!', 330, 620, 5000);
+        this.showBubble('¡Púlsalos para que entren!', 270, 600, 5000);
       } else if (this.onboard().length > 0 && this.elevatorFloor === 0) {
-        this.showBubble('¡Ahora toca el piso del globo!', 330, 620, 4000);
+        this.showBubble('¡Ahora toca el piso del globo!', 270, 600, 4000);
       } else if (this.elevatorFloor !== 0 && this.onboard().length > 0) {
-        this.showBubble('¡Buen viaje!', 330, 620, 3000);
+        this.showBubble('¡Buen viaje!', 270, 600, 3000);
       } else if (this.delivered > 0 && this.onboard().length === 0 && this.elevatorFloor === 0) {
-        this.showBubble('¡Bien! Sube a los demás', 330, 620, 4000);
+        this.showBubble('¡Bien! Sube a los demás', 270, 600, 4000);
       }
       return;
     }
     if (this.elevatorFloor !== 0 && this.onboard().length === 0 && queueCount > 0) {
-      this.showBubble('¡Vuelve a recepción!', 330, 620, 3000);
+      this.showBubble('¡Vuelve a recepción!', 270, 600, 3000);
     } else if (this.elevatorFloor === 0 && queueCount > 0 && this.onboard().length === 0) {
-      this.showBubble('¡Púlsalos para que entren!', 330, 620, 4000);
+      this.showBubble('¡Púlsalos para que entren!', 270, 600, 4000);
     } else if (this.onboard().length > 0) {
-      this.showBubble('¡Toca el piso de los globos!', 330, 620, 3000);
+      this.showBubble('¡Toca el piso de los globos!', 270, 600, 3000);
     }
   }
 
   /** Bocadillo de estrella (estilo cómic) para avisos y pistas. */
   private showBubble(text: string, x: number, y: number, duration = 1600): void {
     this.bubbleText.setText(text);
-    const w = Math.min(340, this.bubbleText.width + 56);
-    const h = 66;
+    const w = Math.min(320, this.bubbleText.width + 48);
+    const h = Math.max(56, this.bubbleText.height + 36);
     this.bubbleBg.clear();
     const spikes = 14;
     const pts: Phaser.Math.Vector2[] = [];
@@ -1131,7 +1024,13 @@ export default class GameScene extends Phaser.Scene {
 
   private createBubble(): void {
     this.bubbleBg = this.add.graphics();
-    this.bubbleText = makeText(this, 0, 0, '', 17, '#6b4423', false);
+    this.bubbleText = this.add.text(0, 0, '', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '17px',
+      color: '#6b4423',
+      align: 'center',
+      wordWrap: { width: 250 },
+    }).setOrigin(0.5);
     this.bubble = this.add.container(0, 0, [this.bubbleBg, this.bubbleText]).setVisible(false);
   }
 

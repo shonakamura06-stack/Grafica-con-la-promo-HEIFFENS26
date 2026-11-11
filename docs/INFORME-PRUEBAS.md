@@ -42,6 +42,20 @@ Ejecutar con `npm test`. Tres suites:
 Salida en `dist/` con `index.html`, JS (~372 KB gzip, Phaser), manifiesto
 PWA, Service Worker e iconos 192/512.
 
+## Robustez y rendimiento (revisión anti-fallos)
+
+- `localStorage` protegido con try/catch y validación de datos corruptos
+  (monedas, nivel desbloqueado, listas) — el juego nunca se rompe por un
+  guardado dañado o por el modo privado del navegador.
+- Audio suspendido automáticamente al cambiar de pestaña/app (ahorra batería
+  y memoria) y reanudado al volver.
+- Sin scroll, sin zoom por doble toque, sin selección de texto y sin menú
+  contextual al mantener pulsado (`touch-action: none`, `position: fixed`).
+- Texturas pequeñas (~2 MB en total) y gráficos estáticos dibujados una sola
+  vez: el juego funciona con fluidez incluso en móviles con menos de 2 GB de RAM.
+- Todas las interfaces revisadas para que ningún elemento se solape con otro
+  (HUD del juego, menú, niveles, álbum, personalizar y ajustes).
+
 ## Verificación manual (lista del prompt maestro)
 
 | # | Comprobación | Resultado |

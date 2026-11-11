@@ -68,8 +68,9 @@ export default class MenuScene extends Phaser.Scene {
 
     // Monstruos flotantes decorativos
     const floaters = ['chispa', 'nube', 'glup', 'moco'];
+    const floaterX = [40, 130, 410, 500];
     floaters.forEach((id, i) => {
-      const x = 60 + i * ((W - 120) / 3);
+      const x = floaterX[i];
       const s = this.add.image(x, 210 + (i % 2) * 26, `monster-${id}`).setScale(0.55).setAlpha(0.95);
       this.tweens.add({
         targets: s, y: s.y + 14, duration: 1400 + i * 250,

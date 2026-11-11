@@ -52,7 +52,7 @@ export function loadSave(): SaveData {
     const parsed = JSON.parse(raw) as Partial<SaveData>;
     const base = defaultSave();
     // Fusión defensiva: si falta algo (versión antigua), se usa el valor por defecto.
-    return {
+    const merged: SaveData = {
       ...base,
       ...parsed,
       custom: { ...base.custom, ...(parsed.custom ?? {}) },
@@ -62,6 +62,13 @@ export function loadSave(): SaveData {
       seenTutorials: parsed.seenTutorials ?? [],
       version: SAVE_VERSION,
     };
+    // Validación extra: si algún dato viene corrupto, se corrige.
+    if (typeof merged.coins !== 'number' || !Number.isFinite(merged.coins) || merged.coins < 0) merged.coins = 0;
+    if (typeof merged.unlockedLevel !== 'number' || merged.unlockedLevel < 1 || merged.unlockedLevel > 30) merged.unlockedLevel = 1;
+    if (!Array.isArray(merged.monstersUnlocked)) merged.monstersUnlocked = base.monstersUnlocked;
+    if (!Array.isArray(merged.seenTutorials)) merged.seenTutorials = [];
+    if (typeof merged.stars !== 'object' || merged.stars === null) merged.stars = {};
+    return merged;
   } catch {
     return defaultSave();
   }

@@ -4,7 +4,11 @@
 
 Juego 2D para móvil construido con **TypeScript + Phaser + Vite**, formato
 vertical 9:16 (540×960) con escalado `FIT` para adaptarse a cualquier
-pantalla. Sin servidor ni cuentas: todo el estado vive en el dispositivo
+pantalla. **Layout en 4 columnas**: columnas 1–2 = edificio con ventanas y
+balcones (recepción en la planta baja); columna 3 = ascensor de cristal;
+columna 4 = tablero de pisos alineado con el edificio; la cola de monstruos
+está frente al edificio, en la parte inferior. Sin servidor ni cuentas: todo
+el estado vive en el dispositivo
 (localStorage) y los recursos se generan en tiempo de ejecución (arte
 vectorial procedural + audio sintetizado), por lo que el juego es ligero
 y funciona sin conexión tras la primera carga (PWA).

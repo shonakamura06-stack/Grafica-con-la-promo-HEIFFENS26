@@ -15,6 +15,7 @@ class AudioEngine {
   private step = 0;
   soundEnabled = true;
   musicEnabled = true;
+  private visBound = false;
 
   /** Debe llamarse tras un gesto del usuario (toque/clic). */
   ensure(): void {
@@ -32,6 +33,15 @@ class AudioEngine {
       this.musicGain = this.ctx.createGain();
       this.musicGain.gain.value = 0.16;
       this.musicGain.connect(this.master);
+      // Pausar el audio cuando la pestaña/app está oculta (ahorra batería y RAM).
+      if (!this.visBound && typeof document !== 'undefined') {
+        this.visBound = true;
+        document.addEventListener('visibilitychange', () => {
+          if (!this.ctx) return;
+          if (document.hidden) void this.ctx.suspend();
+          else void this.ctx.resume();
+        });
+      }
     } catch {
       this.ctx = null;
     }

@@ -24,6 +24,7 @@ const config: Phaser.Types.Core.GameConfig = {
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
   fps: { target: 60 },
+  disableContextMenu: true,
   render: { antialias: true },
   scene: [
     BootScene,
