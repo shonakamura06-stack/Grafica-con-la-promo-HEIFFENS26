@@ -4,13 +4,15 @@
  * (si la tiene), categoría de diálogo y condición de desbloqueo en el álbum.
  */
 
-export type SpecialRule = 'none' | 'giant' | 'twins' | 'shy' | 'sleepwalker' | 'ghost' | 'luggage';
+export type SpecialRule = 'none' | 'giant' | 'twins' | 'shy' | 'sleepwalker' | 'ghost' | 'luggage' | 'duo' | 'fear';
 
 /** Categoría de personalidad: determina sus frases y reacciones. */
 export type MonsterKind =
   | 'none'        // sin categoría especial
   | 'tourist'     // turista con cámara
   | 'vip'         // huésped VIP exigente
+  | 'duo'         // mejores amigos: suben juntos
+  | 'fear'        // miedoso: viaja con pocos
   | 'luggage'     // lleva maletas (ocupa 2 espacios)
   | 'couple'      // enamorado/a (viaja en pareja)
   | 'enemy'       // gruñón (no soporta a otro)
@@ -119,6 +121,21 @@ export const MONSTERS: MonsterDef[] = [
     id: 'grunon', name: 'Gruñón', color: 0x78716c, colorDark: 0x44403c,
     personality: 'Monstruo gruñón que no soporta a ciertos compañeros de viaje. No puede compartir ascensor con ellos.',
     rule: 'none', ruleText: 'Los gruñones no pueden viajar con su enemigo: no los subas juntos.', slots: 1, unlockLevel: 17, scale: 1, kind: 'enemy',
+  },
+  {
+    id: 'pegajin', name: 'Pegajín', color: 0x4ade80, colorDark: 0x15803d,
+    personality: 'Slime verde pegajoso, mejor amigo de Pegajón. Nunca sube al ascensor sin él.',
+    rule: 'duo', ruleText: 'Pegajín y Pegajón suben SIEMPRE juntos, pero cada uno baja en su piso.', slots: 1, unlockLevel: 21, scale: 1, kind: 'duo',
+  },
+  {
+    id: 'pegajon', name: 'Pegajón', color: 0xa78bfa, colorDark: 0x6d28d9,
+    personality: 'Slime morado, la otra mitad del dúo inseparable.',
+    rule: 'duo', ruleText: 'Pegajín y Pegajón suben SIEMPRE juntos, pero cada uno baja en su piso.', slots: 1, unlockLevel: 21, scale: 1, kind: 'duo',
+  },
+  {
+    id: 'temblorin', name: 'Temblorín', color: 0x93c5fd, colorDark: 0x1d4ed8,
+    personality: 'Monstruo miedoso que tiembla si la cabina se llena. Viaja con poca gente.',
+    rule: 'fear', ruleText: 'Temblorín solo viaja si hay 2 monstruos o menos dentro de la cabina.', slots: 1, unlockLevel: 24, scale: 1, kind: 'fear',
   },
 ];
 

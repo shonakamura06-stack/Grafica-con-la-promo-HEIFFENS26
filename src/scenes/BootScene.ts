@@ -618,6 +618,84 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillTriangle(C + 4, 84, C + 10, 84, C + 7, 92);
     cheeks(g, C, 80, 30);
   },
+  // Pegajín: slime verde de un ojo con gota colgando
+  pegajin(g, mood) {
+  g.fillStyle(0x4ade80, 1);
+  g.beginPath();
+  g.moveTo(C - 34, 96); g.lineTo(C - 30, 52); g.lineTo(C - 16, 32); g.lineTo(C, 26); g.lineTo(C + 16, 32); g.lineTo(C + 30, 52); g.lineTo(C + 34, 96);
+  g.closePath(); g.fillPath();
+  g.lineStyle(5, 0x3f2a1a, 1);
+  g.beginPath();
+  g.moveTo(C - 34, 96); g.lineTo(C - 30, 52); g.lineTo(C - 16, 32); g.lineTo(C, 26); g.lineTo(C + 16, 32); g.lineTo(C + 30, 52); g.lineTo(C + 34, 96);
+  g.closePath(); g.strokePath();
+  g.fillStyle(0x4ade80, 1);
+  g.fillCircle(C + 30, 104, 6);
+  g.lineStyle(3, 0x3f2a1a, 1);
+  g.strokeCircle(C + 30, 104, 6);
+  eye(g, C, 62, 15, 8);
+  if (mood === 'angry') angryBrows(g, C, 62, 16);
+  mouth(g, mood, C, 82, 9, 0x14532d);
+  g.fillStyle(0xffffff, 0.55);
+  g.fillEllipse(C - 14, 46, 12, 8);
+  cheeks(g, C, 76, 26);
+  },
+  // Pegajón: slime morado de dos ojos y dientes
+  pegajon(g, mood) {
+  g.fillStyle(0xa78bfa, 1);
+  g.beginPath();
+  g.moveTo(C - 34, 96); g.lineTo(C - 28, 50); g.lineTo(C - 15, 31); g.lineTo(C, 25); g.lineTo(C + 15, 31); g.lineTo(C + 28, 50); g.lineTo(C + 34, 96);
+  g.closePath(); g.fillPath();
+  g.lineStyle(5, 0x3f2a1a, 1);
+  g.beginPath();
+  g.moveTo(C - 34, 96); g.lineTo(C - 28, 50); g.lineTo(C - 15, 31); g.lineTo(C, 25); g.lineTo(C + 15, 31); g.lineTo(C + 28, 50); g.lineTo(C + 34, 96);
+  g.closePath(); g.strokePath();
+  g.fillStyle(0xa78bfa, 1);
+  g.fillCircle(C - 30, 104, 6);
+  g.lineStyle(3, 0x3f2a1a, 1);
+  g.strokeCircle(C - 30, 104, 6);
+  eye(g, C - 13, 60, 11, 6);
+  eye(g, C + 13, 60, 11, 6);
+  if (mood === 'angry') angryBrows(g, C, 60, 14);
+  if (mood === 'happy') {
+    g.fillStyle(0x4c1d95, 1);
+    g.fillEllipse(C, 80, 20, 12);
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(C - 8, 75, C - 2, 75, C - 5, 81);
+    g.fillTriangle(C + 2, 75, C + 8, 75, C + 5, 81);
+  } else {
+    mouth(g, mood, C, 80, 9, 0x4c1d95);
+  }
+  g.fillStyle(0xffffff, 0.55);
+  g.fillEllipse(C + 14, 44, 12, 8);
+  cheeks(g, C, 74, 26);
+  },
+  // Temblorín: azul pálido tembloroso con manos en la cabeza
+  temblorin(g, mood) {
+  g.lineStyle(3, 0x93c5fd, 0.9);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.4;
+    g.beginPath();
+    g.moveTo(C + Math.cos(a) * 44, 68 + Math.sin(a) * 44);
+    g.lineTo(C + Math.cos(a) * 52, 68 + Math.sin(a) * 52);
+    g.strokePath();
+  }
+  g.fillStyle(0x93c5fd, 1);
+  g.fillEllipse(C, 70, 72, 78);
+  outlineEllipse(g, C, 70, 72, 78);
+  g.fillStyle(0xbfdbfe, 1);
+  g.fillCircle(C - 26, 34, 10);
+  g.fillCircle(C + 26, 34, 10);
+  outlineCircle(g, C - 26, 34, 10);
+  outlineCircle(g, C + 26, 34, 10);
+  eye(g, C - 14, 60, 11, 4);
+  eye(g, C + 14, 60, 11, 4);
+  if (mood === 'angry') angryBrows(g, C, 60, 14);
+  g.lineStyle(4, 0x1e3a8a, 1);
+  g.beginPath();
+  g.moveTo(C - 12, 82); g.lineTo(C - 6, 79); g.lineTo(C, 82); g.lineTo(C + 6, 79); g.lineTo(C + 12, 82);
+  g.strokePath();
+  cheeks(g, C, 76, 26);
+  },
 };
 
 export default class BootScene extends Phaser.Scene {
@@ -644,7 +722,7 @@ export default class BootScene extends Phaser.Scene {
       }
     }
 
-    // Nube con carita (decoración del cielo)
+  // Nube con carita (decoración del cielo)
     {
       const g = this.add.graphics();
       g.fillStyle(0xffffff, 0.95);

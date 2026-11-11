@@ -146,3 +146,13 @@ PWA, Service Worker e iconos 192/512.
   pads y placa de lugares según capacidad; tarjetas animadas de desbloqueo; tutorial guiado
   del nivel 1 con flecha al monstruo; victoria con stats dentro del recuadro; Rese sin voz
   (mp3 eliminados, ~841 KB menos).
+
+## Actualización: auditoría del óptimo, nuevos personajes y claridad de Rese
+
+- `npm test`: **51/51 pruebas pasan**. Nueva prueba de auditoría: fuerza bruta independiente
+  == solver en 10 niveles pequeños con todas las reglas (incluye dúo y miedoso).
+- Simulación del plan óptimo re-ejecutada con los niveles nuevos (duo/fear): 30/30 entregan
+  todo y distancia == óptimo; tiempos límite recalibrados (nv25 105 s, nv29 125 s, etc.).
+- Rese ya no interrumpe por piso equivocado; solo explica errores de trato de personajes
+  (parejas, enemigos, tímido, miedoso) y perdona solo esa primera estrella.
+- Récord redefinido a récord personal (save.bestDistance); perfecto = óptimo exacto.

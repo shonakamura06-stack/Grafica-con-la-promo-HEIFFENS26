@@ -21,7 +21,7 @@ import Phaser from 'phaser';
 import { getLevel, LEVELS, LevelDef, TOTAL_LEVELS } from '../data/levels';
 import { MONSTER_MAP, MonsterDef, TWIN_GROUP, Mood, floorColor } from '../data/monsters';
 import { loadSave, writeSave, SaveData, getCustomOption } from '../systems/save';
-import { computeOptimal, starsFor, coinsFor, isPerfect, isRecord, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
+import { computeOptimal, starsFor, coinsFor, isPerfect, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
 import { queueLine, arrivalLine, pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTIONIST_LINES } from '../data/dialogues';
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
@@ -125,9 +125,10 @@ export default class GameScene extends Phaser.Scene {
   private reseSkipBtn!: Phaser.GameObjects.Container;
   private reseOverlay!: Phaser.GameObjects.Rectangle;
   private reseHint!: Phaser.GameObjects.Text;
-  private forgiveMoves = 0;        // movimientos que Rese perdona en la estrella
   private useHearts = false;       // este nivel usa corazones globales
   private dialogLines: string[] = [];
+  private shyExplained = false;  // Rese ya explicó cómo tratar al tímido
+  private fearExplained = false; // Rese ya explicó al miedoso
   private guidedStage = -1;      // -1 esperando, 0 flecha, 1 botón, 2 libre
   private guidedPax?: Passenger;
   private guidedArrow?: Phaser.GameObjects.Graphics;
@@ -164,9 +165,10 @@ export default class GameScene extends Phaser.Scene {
     this.separations = 0;
     this.ruleBreaks = 0;
     this.forgiven = false;
-    this.forgiveMoves = 0;
     this.guidedStage = -1;
     this.guidedPax = undefined;
+    this.shyExplained = false;
+    this.fearExplained = false;
     this.tutorialDone = false;
     this.reseActive = false;
     this.coupleOf.clear();
@@ -901,12 +903,35 @@ export default class GameScene extends Phaser.Scene {
       if (p.def.rule === 'shy' && onboard.length > 0) {
         audio.error();
         this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
+        if (!this.shyExplained) { this.shyExplained = true; this.reseSay('forg_shy'); }
         return;
       }
       if (onboard.some((o) => o.def.rule === 'shy')) {
         audio.error();
         this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
+        if (!this.shyExplained) { this.shyExplained = true; this.reseSay('forg_shy'); }
         return;
+      }
+      // Miedoso: viaja con 2 o menos en la cabina (se bloquea y Rese explica la 1ª vez).
+      const inCab = this.passengers.filter((q) => q.state === 'onboard' || q.state === 'boarding');
+      const duoFriend = p.def.rule === 'duo'
+        ? this.passengers.find((q) => q !== p && q.def.rule === 'duo' && q.state === 'queue')
+        : undefined;
+      const groupSize = 1 + (duoFriend ? 1 : 0);
+      const fearInvolved = p.def.rule === 'fear' || inCab.some((o) => o.def.rule === 'fear');
+      if (fearInvolved && inCab.length + groupSize > 2) {
+        audio.error();
+        this.showBubble('Temblorín se asusta: máximo 2 en la cabina', CAB_X, this.cab.y - 90);
+        if (!this.fearExplained) { this.fearExplained = true; this.reseSay('forg_fear'); }
+        return;
+      }
+      // Dúo pegajoso: suben juntos o no suben.
+      if (p.def.rule === 'duo' && duoFriend) {
+        if (this.usedSlots() + p.slots + duoFriend.slots > this.level.capacity) {
+          audio.error();
+          this.showBubble('¡El dúo necesita 2 lugares libres!', CAB_X, this.cab.y - 90);
+          return;
+        }
       }
       // Enemigos: PUEDEN subir juntos, pero resta 1 estrella (para aprender).
       const myEnemies = this.enemiesOf.get(p.id) ?? [];
@@ -929,6 +954,7 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
       this.board(p);
+      if (duoFriend) this.time.delayedCall(120, () => this.board(duoFriend));
       if (this.guidedStage === 0 && this.guidedPax === p) {
         this.guidedStage = 1;
         this.guidedArrow?.destroy();
@@ -954,7 +980,7 @@ export default class GameScene extends Phaser.Scene {
     p.bobTween?.stop();
     this.setMood(p, 'happy');
     audio.select();
-    const idx = this.onboard().length;
+    const idx = this.passengers.filter((q) => q !== p && (q.state === 'onboard' || q.state === 'boarding')).length;
     const slot = this.slotPosition(idx);
     const targetX = this.cab.x + slot.x;
     const targetY = this.cab.y + (p.def.rule === 'ghost' ? -22 : slot.y);
@@ -1101,15 +1127,13 @@ export default class GameScene extends Phaser.Scene {
    * monstruos vuelven molestos a recepción.
    */
   private wrongFloor(): void {
-    const forgiveNow = !this.forgiven;
-    if (forgiveNow) { this.forgiven = true; this.forgiveMoves = 2; }
+    // El drama (viñeta roja, texto gigante) ya explica el error: Rese NO aparece aquí.
     this.mistakes++;
     audio.wrong();
     if (this.save.settings.vibration) vibrate([60, 40, 60]);
     this.cameras.main.shake(220, 0.006);
     this.flashVignette();
     this.showWrongText();
-    if (forgiveNow) this.reseSay('forg_wrong');
 
     const mood = moodForMistakes(this.mistakes);
     this.onboard().forEach((p) => {
@@ -1307,20 +1331,44 @@ export default class GameScene extends Phaser.Scene {
   /** Bocadillo de estrella (estilo cómic) para avisos y pistas. */
   private showBubble(text: string, x: number, y: number, duration = 1600): void {
     this.bubbleText.setText(text);
-    const w = Math.min(320, this.bubbleText.width + 48);
-    const h = Math.max(56, this.bubbleText.height + 36);
+    const w = Math.min(320, this.bubbleText.width + 52);
+    const h = Math.max(58, this.bubbleText.height + 40);
     this.bubbleBg.clear();
-    const spikes = 14;
+    // Picos irregulares estilo cartoon (deterministas para que no parpadee)
+    const spikes = 16;
     const pts: Phaser.Math.Vector2[] = [];
     for (let i = 0; i < spikes * 2; i++) {
       const a = (i / (spikes * 2)) * Math.PI * 2;
-      const r = i % 2 === 0 ? 1 : 0.8;
+      const jitter = ((i * 37) % 7) / 100;
+      const r = i % 2 === 0 ? 1 : 0.74 + jitter;
       pts.push(new Phaser.Math.Vector2(Math.cos(a) * (w / 2) * r, Math.sin(a) * (h / 2) * r));
     }
-    this.bubbleBg.fillStyle(0xffffff, 0.97);
+    const tail = [
+      new Phaser.Math.Vector2(-w * 0.18, h * 0.28),
+      new Phaser.Math.Vector2(-w * 0.42, h * 0.62 + 22),
+      new Phaser.Math.Vector2(w * 0.02, h * 0.34),
+    ];
+    // Sombra gris desplazada (cuerpo + cola)
+    const sh = pts.map((p) => new Phaser.Math.Vector2(p.x + 7, p.y + 9));
+    this.bubbleBg.fillStyle(0x8f96a8, 0.55);
+    this.bubbleBg.fillPoints(sh, true);
+    this.bubbleBg.fillPoints(tail.map((p) => new Phaser.Math.Vector2(p.x + 7, p.y + 9)), true);
+    // Cola con contorno
+    this.bubbleBg.fillStyle(0xffffff, 0.98);
+    this.bubbleBg.fillPoints(tail, true);
+    this.bubbleBg.lineStyle(5, 0x241640, 1);
+    this.bubbleBg.strokePoints(tail, true);
+    // Cuerpo con contorno grueso
+    this.bubbleBg.fillStyle(0xffffff, 0.98);
     this.bubbleBg.fillPoints(pts, true);
-    this.bubbleBg.lineStyle(3, 0x241640, 1);
     this.bubbleBg.strokePoints(pts, true);
+    // Parche blanco para unir cola y cuerpo sin línea interior
+    this.bubbleBg.fillStyle(0xffffff, 1);
+    this.bubbleBg.fillPoints([
+      new Phaser.Math.Vector2(-w * 0.16, h * 0.26),
+      new Phaser.Math.Vector2(-w * 0.3, h * 0.44),
+      new Phaser.Math.Vector2(0, h * 0.32),
+    ], true);
     this.bubble.setPosition(x, y).setDepth(60).setVisible(true).setAlpha(1).setScale(0.6);
     this.bubbleText.setPosition(0, 0);
     this.tweens.add({ targets: this.bubble, scale: 1, duration: 180, ease: 'Back.easeOut' });
@@ -1593,6 +1641,14 @@ export default class GameScene extends Phaser.Scene {
     if (this.level.enemies.length > 0 && !prev.some((l) => l.enemies.length > 0)) {
       cards.push({ draw: 'grunon', title: '¡MONSTRUOS ENEMIGOS!', text: 'Los enemigos llevan un rayo de enojo. Si viajan juntos, pierdes 1 estrella: ¡sube a uno por viaje!' });
     }
+    const hasDuo = (l: LevelDef) => l.passengers.some((p) => MONSTER_MAP[p.m].rule === 'duo');
+    if (hasDuo(this.level) && !prev.some(hasDuo)) {
+      cards.push({ draw: 'duo', title: '¡PEGAJÍN Y PEGAJÓN!', text: 'Los mejores amigos suben SIEMPRE juntos al ascensor (necesitan 2 lugares), pero cada uno baja en su propio piso.' });
+    }
+    const hasFear = (l: LevelDef) => l.passengers.some((p) => MONSTER_MAP[p.m].rule === 'fear');
+    if (hasFear(this.level) && !prev.some(hasFear)) {
+      cards.push({ draw: 'fear', title: '¡TEMBLORÍN EL MIEDOSO!', text: 'Tiembla si la cabina se llena: con él dentro solo viajan 2 monstruos como máximo. ¡Planifica viajes cortos!' });
+    }
     const hasLuggage = (l: LevelDef) => l.passengers.some((p) => MONSTER_MAP[p.m].rule === 'luggage');
     if (hasLuggage(this.level) && !prev.some(hasLuggage)) {
       cards.push({ draw: 'maletero', title: '¡LLEGÓ MALETERO!', text: 'Sus maletas ocupan 2 lugares del ascensor. Fíjate en los pads del suelo: él tapa dos.' });
@@ -1632,6 +1688,12 @@ export default class GameScene extends Phaser.Scene {
       else if (card.draw === 'lives') {
         icon = this.add.container(W / 2, H / 2 - 70, [-46, 0, 46].map((dx) => this.add.image(dx, 0, 'heart').setScale(1.4)));
       } else if (card.draw === 'grunon') icon = this.add.image(W / 2, H / 2 - 70, 'grunon').setScale(1.5);
+      else if (card.draw === 'duo') {
+        icon = this.add.container(W / 2, H / 2 - 70, [
+          this.add.image(-34, 0, 'pegajin').setScale(1.2),
+          this.add.image(34, 0, 'pegajon').setScale(1.2),
+        ]);
+      } else if (card.draw === 'fear') icon = this.add.image(W / 2, H / 2 - 70, 'temblorin').setScale(1.5);
       else if (card.draw === 'maletero') icon = this.add.image(W / 2, H / 2 - 70, 'maletero').setScale(1.5);
       else if (card.draw === 'cab') {
         const g = this.add.graphics();
@@ -1814,13 +1876,15 @@ export default class GameScene extends Phaser.Scene {
     if (this.won) return;
     this.won = true;
     audio.victory();
-    const effDistance = Math.max(this.optimal, this.distance - this.forgiveMoves);
+    const effDistance = this.distance;
     let stars = starsFor(effDistance, this.optimal);
     // Cada regla rota (pareja separada, enemigos juntos) resta 1 estrella.
     const penalties = this.separations + this.ruleBreaks;
     stars = Math.max(1, stars - penalties);
     const perfect = isPerfect(effDistance, this.optimal) && penalties === 0;
-    const record = isRecord(effDistance, this.optimal) && penalties === 0;
+    const prevBest = this.save.bestDistance[this.level.id];
+    const record = penalties === 0 && prevBest !== undefined && effDistance < prevBest;
+    this.save.bestDistance[this.level.id] = Math.min(prevBest ?? Infinity, effDistance);
     const prevStars = this.save.stars[this.level.id] ?? 0;
     const earned = stars > prevStars ? coinsFor(stars, perfect, record) : 2;
 
@@ -1934,10 +1998,11 @@ export default class GameScene extends Phaser.Scene {
 
     let banner = '';
     let bannerColor = '#2f9e44';
-    if (record) banner = '¡RÉCORD! Superaste el óptimo: +150 monedas';
+    if (record) banner = '¡NUEVO RÉCORD PERSONAL! +150 monedas';
     else if (perfect) banner = '¡PERFECTO! Ruta óptima: +50 monedas';
     if (penalties > 0) { banner = `Reglas rotas: ${penalties} (-${penalties} estrella)`; bannerColor = '#ef4444'; }
     if (banner) c.add(makeText(this, W / 2, H / 2 + 34, banner, 16, bannerColor, false));
+    c.add(makeText(this, W / 2, H / 2 + 56, `Ruta óptima: ${this.optimal} pasos`, 14, '#8a6fd0', false));
     if (newMonsters.length > 0) {
       const names = newMonsters.map((id) => MONSTER_MAP[id].name).join(', ');
       c.add(makeText(this, W / 2, H / 2 + 58, `¡Nuevo en el álbum: ${names}!`, 15, '#2f9e44', false));

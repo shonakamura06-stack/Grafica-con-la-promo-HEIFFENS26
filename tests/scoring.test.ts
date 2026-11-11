@@ -6,6 +6,7 @@
  * Ejecutar con: npm test
  */
 import { describe, it, expect } from 'vitest';
+import { MONSTER_MAP } from '../src/data/monsters';
 import { computeOptimal, starsFor, starThresholds, coinsFor, isPerfect, moodForMistakes, MAX_MISTAKES } from '../src/systems/scoring';
 import { LevelDef } from '../src/data/levels';
 
@@ -148,4 +149,99 @@ describe('ánimos ante pisos equivocados', () => {
   it('el límite de errores es 3 (vuelven molestos a recepción)', () => {
     expect(MAX_MISTAKES).toBe(3);
   });
+});
+
+describe('auditoría del óptimo: fuerza bruta independiente vs solver', () => {
+  // Búsqueda exhaustiva con poda, escrita aparte del solver, con las mismas
+  // reglas del juego (capacidad, gemelos, dúo, tímido, miedoso, parejas,
+  // enemigos no juntos, salida automática al llegar, bajar cuenta).
+  function brute(level: LevelDef): number {
+    const infos = level.passengers.map((p, i) => {
+      const def = MONSTER_MAP[p.m];
+      return { dest: p.d, slots: def.slots, rule: def.rule, i };
+    });
+    const pairOf = (i: number, rule: string): number => {
+      if (infos[i].rule !== rule) return -1;
+      const grp = infos.filter((x) => x.rule === rule).map((x) => x.i);
+      const pos = grp.indexOf(i);
+      return grp[pos % 2 === 0 ? pos + 1 : pos - 1];
+    };
+    const coupleOf = (i: number): number => {
+      for (const [a, b] of level.couples) if (a === i) return b; else if (b === i) return a;
+      return -1;
+    };
+    const enemyOf = (i: number): number[] => {
+      const out: number[] = [];
+      for (const [a, b] of level.enemies) { if (a === i) out.push(b); if (b === i) out.push(a); }
+      return out;
+    };
+    const n = infos.length;
+    const full = (1 << n) - 1;
+    const slots = (mask: number) => infos.reduce((t, x, i) => t + ((mask & (1 << i)) ? x.slots : 0), 0);
+    const count = (mask: number) => infos.reduce((t, _x, i) => t + ((mask & (1 << i)) ? 1 : 0), 0);
+    let best = Infinity;
+    const seen = new Map<string, number>();
+    const dfs = (delivered: number, onboard: number, pos: number, d: number, depth: number): void => {
+      if (d >= best || depth > 16) return;
+      if (delivered === full) { best = d; return; }
+      const key = `${delivered}|${onboard}|${pos}`;
+      if ((seen.get(key) ?? Infinity) <= d) return;
+      seen.set(key, d);
+      if (pos === 0) {
+        for (let i = 0; i < n; i++) {
+          if (delivered & (1 << i)) continue;
+          if (onboard & (1 << i)) continue;
+          let group = [i];
+          const tw = pairOf(i, 'twins'); if (tw >= 0) group.push(tw);
+          const du = pairOf(i, 'duo'); if (du >= 0) group.push(du);
+          let mask = onboard;
+          group.forEach((g) => { mask |= 1 << g; });
+          if (slots(mask) > level.capacity) continue;
+          if (infos[i].rule === 'shy' && onboard !== 0) continue;
+          if (group.some((g) => infos[g].rule === 'shy') && count(onboard) > 0) continue;
+          if (infos.some((x, k) => x.rule === 'shy' && (onboard & (1 << k)))) continue;
+          if (enemyOf(i).some((e) => onboard & (1 << e))) continue;
+          const fear = group.some((g) => infos[g].rule === 'fear') || infos.some((x, k) => x.rule === 'fear' && (onboard & (1 << k)));
+          if (fear && count(mask) > 2) continue;
+          dfs(delivered, mask, 0, d, depth + 1);
+        }
+      }
+      for (let f = 0; f <= level.floors; f++) {
+        if (f === pos) continue;
+        let nd = delivered; let nb = onboard;
+        for (let i = 0; i < n; i++) {
+          if (!(onboard & (1 << i)) || infos[i].dest !== f) continue;
+          const cp = coupleOf(i);
+          if (cp >= 0 && !(onboard & (1 << cp))) continue;
+          nd |= 1 << i; nb &= ~(1 << i);
+        }
+        dfs(nd, nb, f, d + Math.abs(f - pos), depth + 1);
+      }
+    };
+    dfs(0, 0, 0, 0, 0);
+    return best;
+  }
+
+  const L = (passengers: Array<[string, number]>, floors = 3, capacity = 3, couples: Array<[number, number]> = [], enemies: Array<[number, number]> = []): LevelDef => ({
+    id: 99, title: 'test', floors, capacity, timeLimit: 120, lives: 0, breakdownChance: 0, couples, enemies,
+    passengers: passengers.map(([m, d]) => ({ m, d })),
+  });
+
+  it('el solver coincide con la fuerza bruta en niveles pequeños (todas las reglas)', () => {
+    const cases: LevelDef[] = [
+      L([['bubu', 2]]),
+      L([['bubu', 2], ['chispa', 3]], 3, 2),
+      L([['pegajin', 2], ['pegajon', 3]], 3, 2),
+      L([['pegajin', 2], ['pegajon', 3], ['bubu', 1]], 3, 3),
+      L([['temblorin', 2], ['bubu', 3], ['chispa', 2]], 3, 3),
+      L([['enamorado', 2], ['enamorado', 2], ['bubu', 3]], 3, 2, [[0, 1]]),
+      L([['grunon', 2], ['bubu', 2]], 3, 2, [], [[0, 1]]),
+      L([['sombrin', 2], ['bubu', 2]], 3, 2),
+      L([['gordito', 2], ['bubu', 2]], 3, 2),
+      L([['nocti', 3], ['moco', 1], ['nube', 3]], 3, 2),
+    ];
+    for (const lvl of cases) {
+      expect(computeOptimal(lvl).optimal, JSON.stringify(lvl.passengers)).toBe(brute(lvl));
+    }
+  }, 60000);
 });

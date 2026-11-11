@@ -142,3 +142,32 @@ una tarjeta visual. Después queda registrada en el álbum.
   explicación y toque para continuar, antes del diálogo de Rese.
 - **Rese sin voz**: los diálogos son solo texto (letra a letra, clic para continuar).
   Los clips de audio se eliminaron del juego y del repositorio.
+
+## Rese: cuándo aparece y cuándo no
+
+- Rese NO aparece si te equivocas de piso: la viñeta roja, el texto gigante y la sacudida
+  ya lo dejan clarísimo. Tampoco perdona estrellas de piso equivocado.
+- Rese SÍ aparece (una vez por nivel) si tratas mal a un personaje:
+  parejas separadas, enemigos juntos, o intentar subir a un tímido/miedoso mal.
+  En esos casos explica cómo tratarlos y perdona la estrella de ESA primera vez.
+
+## Personajes que complican (nuevos)
+
+- **Pegajín y Pegajón (dúo, nv 21+)**: suben SIEMPRE juntos (necesitan 2 lugares),
+  pero cada uno baja en su propio piso.
+- **Temblorín (miedoso, nv 24+)**: con él dentro, la cabina lleva como máximo 2 monstruos.
+- Ambos entran en el solver óptimo, en las simulaciones de tiempo y en las pruebas.
+
+## Récord y óptimo
+
+- «¡PERFECTO!» (+50 monedas) = completar en la distancia óptima exacta sin penalizaciones.
+- «¡NUEVO RÉCORD PERSONAL!» (+150) = superar tu propia mejor distancia del nivel
+  (guardada en el save). La pantalla de victoria muestra «Ruta óptima: X pasos» para apuntar.
+- El óptimo está auditado: una búsqueda por fuerza bruta independiente coincide con el
+  solver en niveles pequeños con TODAS las reglas (capacidad, gemelos, dúo, tímido,
+  miedoso, parejas, enemigos, salidas automáticas, bajadas que cuentan).
+
+## Globos de diálogo
+
+- Globos cartoon: picos irregulares, contorno grueso oscuro, sombra gris desplazada y
+  cola que apunta al que habla (estilo grito de cómic).

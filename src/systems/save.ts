@@ -33,6 +33,7 @@ export interface SaveData {
   heartsRefillAt: number;             // ms epoch: con 0 corazones, cuándo se recargan solos
   premiumUntil: number;               // ms epoch: vidas infinitas sin anuncios; 0 = sin premium
   adsWatched: number;                 // anuncios de recompensa vistos (estadística)
+  bestDistance: Record<number, number>; // nivel -> mejor distancia personal
 }
 
 const KEY = 'piso-equivocado-save-v1';
@@ -53,6 +54,7 @@ export function defaultSave(): SaveData {
     heartsRefillAt: 0,
     premiumUntil: 0,
     adsWatched: 0,
+    bestDistance: {},
   };
 }
 
@@ -75,6 +77,7 @@ export function loadSave(): SaveData {
       heartsRefillAt: typeof parsed.heartsRefillAt === 'number' ? parsed.heartsRefillAt : 0,
       premiumUntil: typeof parsed.premiumUntil === 'number' ? parsed.premiumUntil : 0,
       adsWatched: typeof parsed.adsWatched === 'number' ? parsed.adsWatched : 0,
+      bestDistance: typeof parsed.bestDistance === 'object' && parsed.bestDistance !== null ? parsed.bestDistance : {},
       version: SAVE_VERSION,
     };
     // Validación extra: si algún dato viene corrupto, se corrige.

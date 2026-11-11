@@ -70,6 +70,18 @@ export const QUEUE_LINES: Record<MonsterKind, string[]> = {
     '¡No dejen a nadie atrás! ¡Al {d}!',
     '¡Juntos al {d}, como siempre!',
   ],
+  duo: [
+    'Con mi mejor amigo a donde sea, al piso {d} también.',
+    '¡Espera a Pegajón! Sin él no subo, al piso {d} tampoco.',
+    'Juntitos en el ascensor, separaditos al bajar al {d}.',
+    'Somos pegajosos pero cumplidos: piso {d}.',
+  ],
+  fear: [
+    'Al piso {d}… pero con poquita gente, ¿sí?',
+    'T-tiemblo si se llena el ascensor… piso {d}.',
+    'Máximo dos dentro, por favor… voy al {d}.',
+    '¿Podemos ir tranquilos al {d}?',
+  ],
 };
 
 /** Frases al llegar a su piso (salida feliz). */
@@ -123,6 +135,16 @@ export const ARRIVAL_LINES: Record<MonsterKind, string[]> = {
     '¡Nuestro piso familiar!',
     '¡Juntos en casa!',
     '¡Por fin todos aquí!',
+  ],
+  duo: [
+    '¡Gracias por el viaje juntos!',
+    '¡Nos vemos en el lobby, amigo!',
+    '¡Llegué! Pegajón anda por ahí.',
+  ],
+  fear: [
+    '¡L-legué! Gracias por no llenar la cabina…',
+    '¡Qué viaje más tranquilo! Estoy en el {d}.',
+    'Sobreviví… digo, ¡llegué al {d}!',
   ],
 };
 

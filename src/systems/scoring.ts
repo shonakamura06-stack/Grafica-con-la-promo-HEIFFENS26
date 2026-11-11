@@ -55,6 +55,7 @@ interface PassengerInfo {
   slots: number;
   rule: string;
   twinPair: number; // índice del gemelo pareja, o -1
+  duoPair: number;  // índice del mejor amigo (suben juntos), o -1
   couplePair: number; // índice de la pareja enamorada, o -1
   enemies: number[]; // índices de enemigos (no pueden viajar juntos)
 }
@@ -62,13 +63,19 @@ interface PassengerInfo {
 function buildInfos(level: LevelDef): PassengerInfo[] {
   const infos: PassengerInfo[] = level.passengers.map((p) => {
     const def = MONSTER_MAP[p.m];
-    return { dest: p.d, slots: def.slots, rule: def.rule, twinPair: -1, couplePair: -1, enemies: [] };
+    return { dest: p.d, slots: def.slots, rule: def.rule, twinPair: -1, duoPair: -1, couplePair: -1, enemies: [] };
   });
   // Emparejar gemelos: cada gemelo conoce a su pareja.
   const twinIdx = infos.map((inf, i) => (inf.rule === 'twins' ? i : -1)).filter((i) => i >= 0);
   for (let k = 0; k + 1 < twinIdx.length; k += 2) {
     infos[twinIdx[k]].twinPair = twinIdx[k + 1];
     infos[twinIdx[k + 1]].twinPair = twinIdx[k];
+  }
+  // Mejores amigos: suben juntos (bajan por separado).
+  const duoIdx = infos.map((inf, i) => (inf.rule === 'duo' ? i : -1)).filter((i) => i >= 0);
+  for (let k = 0; k + 1 < duoIdx.length; k += 2) {
+    infos[duoIdx[k]].duoPair = duoIdx[k + 1];
+    infos[duoIdx[k + 1]].duoPair = duoIdx[k];
   }
   // Parejas enamoradas: deben salir juntas del ascensor.
   for (const [a, b] of level.couples) {
@@ -93,6 +100,21 @@ function slotsOf(mask: number, infos: PassengerInfo[]): number {
   return s;
 }
 
+function popcount(m: number): number {
+  let c = 0;
+  while (m) { c += m & 1; m >>= 1; }
+  return c;
+}
+
+function hasFear(mask: number, infos: PassengerInfo[]): boolean {
+  for (let i = 0; i < infos.length; i++) {
+    if (mask & (1 << i)) {
+      if (infos[i].rule === 'fear') return true;
+    }
+  }
+  return false;
+}
+
 function hasShy(mask: number, infos: PassengerInfo[]): boolean {
   for (let i = 0; i < infos.length; i++) {
     if (mask & (1 << i)) {
@@ -113,10 +135,17 @@ function canBoard(i: number, onboard: number, infos: PassengerInfo[], capacity: 
   for (const e of inf.enemies) {
     if (onboard & (1 << e)) return false;
   }
-  // Gemelos: suben en pareja (se comprueba el coste conjunto).
+  // Gemelos y dúo: suben en pareja (se comprueba el coste conjunto).
   let extra = inf.slots;
   if (inf.rule === 'twins' && inf.twinPair >= 0) extra += infos[inf.twinPair].slots;
-  return slotsOf(onboard, infos) + extra <= capacity;
+  if (inf.rule === 'duo' && inf.duoPair >= 0) extra += infos[inf.duoPair].slots;
+  if (slotsOf(onboard, infos) + extra > capacity) return false;
+  // Miedoso: con él involucrado, como mucho 2 monstruos dentro.
+  let newMask = onboard | (1 << i);
+  if (inf.rule === 'twins' && inf.twinPair >= 0) newMask |= 1 << inf.twinPair;
+  if (inf.rule === 'duo' && inf.duoPair >= 0) newMask |= 1 << inf.duoPair;
+  if (hasFear(newMask, infos) && popcount(newMask) > 2) return false;
+  return true;
 }
 
 /**
@@ -211,6 +240,9 @@ export function computeOptimal(level: LevelDef): SolveResult {
         let next = onboard | (1 << i);
         if (infos[i].rule === 'twins' && infos[i].twinPair >= 0) {
           next |= 1 << infos[i].twinPair;
+        }
+        if (infos[i].rule === 'duo' && infos[i].duoPair >= 0) {
+          next |= 1 << infos[i].duoPair;
         }
         relax(d, delivered, next, 0, { kind: 'board', pax: i });
       }

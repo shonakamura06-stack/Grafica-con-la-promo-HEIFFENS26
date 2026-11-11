@@ -145,5 +145,25 @@ export const RESE_VOICE: Record<string, ReseClip> = {
       8.67
     ],
     "dur": 9.59
+  },
+  "forg_fear": {
+    "file": "",
+    "lines": [
+      "¡Uy! Temblorín se asusta si la cabina se llena.",
+      "Con él dentro, viajan 2 monstruos como máximo.",
+      "Baja a alguien primero y luego súbelo. ¡Tú puedes!"
+    ],
+    "t": [0, 0, 0],
+    "dur": 0
+  },
+  "forg_shy": {
+    "file": "",
+    "lines": [
+      "¡Uy! Los monstruos tímidos viajan SOLOS o con la cabina vacía.",
+      "Primero baja a los demás y luego súbelo.",
+      "¡Tú puedes!"
+    ],
+    "t": [0, 0, 0],
+    "dur": 0
   }
 };

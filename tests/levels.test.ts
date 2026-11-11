@@ -133,12 +133,14 @@ describe('datos de monstruos', () => {
 describe('simulación real del plan óptimo (reglas del juego)', () => {
   /** Reproduce el plan paso a paso con las mismas reglas que usa el juego. */
   function simulate(level: (typeof LEVELS)[number], plan: PlanStep[]) {
-    const twinOf = (i: number): number => {
-      if (MONSTER_MAP[level.passengers[i].m].rule !== 'twins') return -1;
-      const twins = level.passengers.map((p, k) => (MONSTER_MAP[p.m].rule === 'twins' ? k : -1)).filter((k) => k >= 0);
-      const pos = twins.indexOf(i);
-      return twins[pos % 2 === 0 ? pos + 1 : pos - 1];
+    const pairOf = (i: number, rule: string): number => {
+      if (MONSTER_MAP[level.passengers[i].m].rule !== rule) return -1;
+      const grp = level.passengers.map((p, k) => (MONSTER_MAP[p.m].rule === rule ? k : -1)).filter((k) => k >= 0);
+      const pos = grp.indexOf(i);
+      return grp[pos % 2 === 0 ? pos + 1 : pos - 1];
     };
+    const twinOf = (i: number): number => pairOf(i, 'twins');
+    const duoOf = (i: number): number => pairOf(i, 'duo');
     const coupleOf = (i: number): number => {
       for (const [a, b] of level.couples) {
         if (a === i) return b;
@@ -156,6 +158,8 @@ describe('simulación real del plan óptimo (reglas del juego)', () => {
         const group = [step.pax];
         const tw = twinOf(step.pax);
         if (tw >= 0) group.push(tw);
+        const du = duoOf(step.pax);
+        if (du >= 0) group.push(du);
         const slots = [...onboard, ...group].reduce((t, i) => t + MONSTER_MAP[level.passengers[i].m].slots, 0);
         if (slots > level.capacity) throw new Error(`nv ${level.id}: capacidad excedida`);
         onboard.push(...group);

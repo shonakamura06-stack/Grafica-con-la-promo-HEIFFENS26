@@ -103,7 +103,7 @@ export const LEVELS: LevelDef[] = [
     P('enamorado', 3), P('enamorado', 3), P('gordito', 5), P('bubu', 2), P('chispa', 5), P('moco', 1), P('nube', 4), P('glup', 3),
   ]},
   { id: 22, title: 'Buenas noches, Nocti', floors: 5, capacity: 4, timeLimit: 90, lives: 3, breakdownChance: 0.15, couples: [], enemies: [[0, 1]], passengers: [
-    P('nocti', 4), P('grunon', 1), P('bubu', 1), P('chispa', 5), P('moco', 2), P('nube', 5), P('rufi', 3), P('glup', 4),
+    P('nocti', 4), P('grunon', 1), P('pegajin', 1), P('pegajon', 5), P('moco', 2), P('nube', 5), P('rufi', 3), P('glup', 4),
   ]},
   { id: 23, title: 'Siesta colectiva', floors: 5, capacity: 4, timeLimit: 100, lives: 3, breakdownChance: 0.2, couples: [[1, 2]], enemies: [], passengers: [
     P('nocti', 2), P('enamorado', 5), P('enamorado', 5), P('sombrin', 4), P('bubu', 5), P('chispa', 3), P('moco', 5), P('nube', 1),
@@ -112,8 +112,8 @@ export const LEVELS: LevelDef[] = [
     P('fantasmita', 5), P('grunon', 3), P('bubu', 1), P('chispa', 2), P('moco', 3), P('nube', 4), P('rufi', 5), P('glup', 5),
   ]},
   // ── Niveles 25-30: rompecabezas exigentes ──────────────────────────────
-  { id: 25, title: 'Fantasma y gigante', floors: 5, capacity: 4, timeLimit: 90, lives: 3, breakdownChance: 0.25, couples: [[1, 2]], enemies: [], passengers: [
-    P('fantasmita', 2), P('enamorado', 5), P('enamorado', 5), P('gordito', 4), P('bubu', 5), P('chispa', 1), P('moco', 5), P('nube', 3),
+  { id: 25, title: 'Fantasma y gigante', floors: 5, capacity: 4, timeLimit: 105, lives: 3, breakdownChance: 0.25, couples: [[1, 2]], enemies: [], passengers: [
+    P('fantasmita', 2), P('enamorado', 5), P('enamorado', 5), P('gordito', 4), P('temblorin', 5), P('chispa', 1), P('moco', 5), P('nube', 3),
   ]},
   { id: 26, title: 'Todo junto', floors: 5, capacity: 4, timeLimit: 105, lives: 3, breakdownChance: 0.3, couples: [[0, 1]], enemies: [[2, 3]], passengers: [
     P('enamorado', 2), P('enamorado', 2), P('grunon', 5), P('nocti', 5), P('fantasmita', 4), P('bubu', 5), P('chispa', 1), P('moco', 3), P('nube', 5),
@@ -121,11 +121,11 @@ export const LEVELS: LevelDef[] = [
   { id: 27, title: 'Noche en el hotel', floors: 5, capacity: 4, timeLimit: 115, lives: 3, breakdownChance: 0.3, couples: [[1, 2]], enemies: [], passengers: [
     P('nocti', 5), P('enamorado', 1), P('enamorado', 1), P('sombrin', 3), P('fantasmita', 5), P('gordito', 2), P('bubu', 4), P('chispa', 5), P('moco', 5), P('nube', 2),
   ]},
-  { id: 28, title: 'Peso pesado', floors: 5, capacity: 4, timeLimit: 115, lives: 3, breakdownChance: 0.35, couples: [[1, 2]], enemies: [[2, 3]], passengers: [
-    P('gordito', 5), P('enamorado', 4), P('enamorado', 4), P('grunon', 1), P('bubu', 3), P('chispa', 5), P('moco', 2), P('nube', 5), P('rufi', 4), P('glup', 5),
+  { id: 28, title: 'Peso pesado', floors: 5, capacity: 4, timeLimit: 110, lives: 3, breakdownChance: 0.35, couples: [[1, 2]], enemies: [[2, 3]], passengers: [
+    P('gordito', 5), P('enamorado', 4), P('enamorado', 4), P('grunon', 1), P('pegajin', 3), P('pegajon', 5), P('moco', 2), P('nube', 5), P('rufi', 4), P('glup', 5),
   ]},
-  { id: 29, title: 'Dulces sueños', floors: 5, capacity: 4, timeLimit: 115, lives: 3, breakdownChance: 0.35, couples: [[1, 2]], enemies: [[2, 3]], passengers: [
-    P('sombrin', 5), P('enamorado', 2), P('enamorado', 2), P('grunon', 4), P('nocti', 4), P('fantasmita', 1), P('bubu', 3), P('chispa', 5), P('moco', 4), P('nube', 5),
+  { id: 29, title: 'Dulces sueños', floors: 5, capacity: 4, timeLimit: 125, lives: 3, breakdownChance: 0.35, couples: [[1, 2]], enemies: [[2, 3]], passengers: [
+    P('sombrin', 5), P('enamorado', 2), P('enamorado', 2), P('grunon', 4), P('nocti', 4), P('fantasmita', 1), P('temblorin', 3), P('chispa', 5), P('moco', 4), P('nube', 5),
   ]},
   { id: 30, title: '¡La gran noche!', floors: 5, capacity: 4, timeLimit: 120, lives: 3, breakdownChance: 0.4, couples: [[1, 2]], enemies: [[2, 3]], passengers: [
     P('gordito', 5), P('enamorado', 3), P('enamorado', 3), P('grunon', 5), P('nocti', 5), P('fantasmita', 2), P('sombrin', 4), P('bubu', 1), P('chispa', 5), P('moco', 2),
