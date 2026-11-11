@@ -6,7 +6,8 @@
 
 import Phaser from 'phaser';
 import { loadSave } from '../systems/save';
-import { makeButton, makeCoins, makeText, makeWoodSign, COLORS } from '../systems/ui';
+import { makeButton, makeCoins, makeText, makeWoodSign, makePanel, COLORS } from '../systems/ui';
+import qrcode from 'qrcode-generator';
 import { audio } from '../systems/audio';
 
 export default class MenuScene extends Phaser.Scene {
@@ -118,6 +119,51 @@ export default class MenuScene extends Phaser.Scene {
       onClick: () => this.scene.start('settings'),
     });
 
-    makeText(this, W / 2, H - 26, 'Un juego de ascensor para toda la familia · v1.0', 14, '#a06a35', false);
+    // Botón para llevar el juego al celular (solo cuando hay una URL pública).
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      makeButton(this, cx, 898, 320, 48, 'JUGAR EN TU CELULAR', {
+        bg: COLORS.accent, fontSize: 18,
+        onClick: () => this.showQrPanel(),
+      });
+    }
+
+    makeText(this, W / 2, H - 14, 'Un juego de ascensor para toda la familia · v1.0', 13, '#a06a35', false);
+  }
+
+  /** Panel con código QR de la URL pública para abrir el juego en el celular. */
+  private showQrPanel(): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const url = `${window.location.origin}/`;
+    const c = this.add.container(0, 0).setDepth(60);
+    const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.55).setOrigin(0).setInteractive();
+    c.add(dim);
+    c.add(makePanel(this, W / 2, H / 2, 430, 580));
+    c.add(makeText(this, W / 2, H / 2 - 250, 'JUGAR EN TU CELULAR', 26, '#a06a35'));
+    c.add(makeText(this, W / 2, H / 2 - 214, 'Escanea este código con la cámara del cel', 16, '#6b4423', false));
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    const n = qr.getModuleCount();
+    const size = 300;
+    const cell = size / n;
+    const g = this.add.graphics();
+    g.fillStyle(0xffffff, 1);
+    g.fillRoundedRect(W / 2 - size / 2 - 14, H / 2 - 24 - size / 2 - 14, size + 28, size + 28, 12);
+    g.fillStyle(0x17102e, 1);
+    for (let r = 0; r < n; r++) {
+      for (let col = 0; col < n; col++) {
+        if (qr.isDark(r, col)) {
+          g.fillRect(W / 2 - size / 2 + col * cell, H / 2 - 24 - size / 2 + r * cell, Math.ceil(cell), Math.ceil(cell));
+        }
+      }
+    }
+    c.add(g);
+    c.add(makeText(this, W / 2, H / 2 + 152, url, 13, '#6b4423', false));
+    c.add(makeText(this, W / 2, H / 2 + 182, 'Y en el cel: menú del navegador → «Instalar app»', 15, '#6b4423', false));
+    c.add(makeButton(this, W / 2, H / 2 + 240, 200, 52, 'CERRAR', {
+      bg: COLORS.purple, fontSize: 20, onClick: () => c.destroy(),
+    }));
   }
 }
