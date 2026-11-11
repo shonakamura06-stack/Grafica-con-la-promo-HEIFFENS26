@@ -122,3 +122,23 @@ una tarjeta visual. Después queda registrada en el álbum.
   ingreso principal = pack premium único o mensual barato (19,99 Bs) + anuncios *opt-in*
   (solo quien quiere vidas extra). Es el modelo aceptado por políticas de apps infantiles.
 - El temporizador de espera y el premium se guardan en el save (resisten cerrar el juego).
+
+## Reglas de claridad y tiempos (corrección de jugabilidad)
+
+- **El panel NUNCA revela información**: los botones de piso no se iluminan ni muestran
+  cuántos monstruos van a cada piso. La única pista es el globo-numero de cada monstruo.
+- **Tutorial guiado (nivel 1)**: una flecha roja señala AL monstruo ("mira a X: su globo dice 2…")
+  y el diálogo indica tocar el botón de su piso. Nunca se ilumina el botón ni se dan conteos.
+- **Bajar es un movimiento**: el ascensor vacío NO vuelve solo a recepción; el jugador debe
+  tocar PISO 0 y ese viaje suma al recorrido (y a las estrellas por eficiencia).
+- **Tiempos calibrados por simulación lenta**: cada timeLimit es el tiempo de jugar el nivel
+  siguiendo la ruta óptima a ritmo de niño lento (leer 8 s, tocar monstruo 4 s, tocar botón 3 s,
+  puertas 0.24 s, 0.38 s por piso, reaccionar 1.5 s, ver bajar 1.5 s, leer final 4 s),
+  redondeado a múltiplos de 5. Rangos nuevos: 40 s (nv 1) a 120 s (nv 30).
+- **Cabina lógica**: el suelo de la cabina marca tantos pads como capacidad (2/3/4) y el techo
+  lleva un punto dorado por lugar; con capacidad 4 los monstruos viajan algo más apretados.
+- **Desbloqueos anunciados**: al empezar un nivel con novedad (ascensor más grande, parejas,
+  corazones, enemigos, maletas, averías) aparece una tarjeta animada "¡NUEVO!" con icono,
+  explicación y toque para continuar, antes del diálogo de Rese.
+- **Rese sin voz**: los diálogos son solo texto (letra a letra, clic para continuar).
+  Los clips de audio se eliminaron del juego y del repositorio.

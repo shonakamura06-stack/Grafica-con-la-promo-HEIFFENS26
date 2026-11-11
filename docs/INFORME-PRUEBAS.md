@@ -135,3 +135,14 @@ PWA, Service Worker e iconos 192/512.
   linterna abisal/tentáculos/antenas) — ya no parecen ratón ni pez.
 - Animaciones: botones con hundimiento y rebote Back.easeOut en todo el juego y
   fundido de entrada de cámara en las 6 escenas.
+
+## Actualización: claridad, tiempos simulados y cabina lógica
+
+- `npm test`: **50/50 pruebas pasan** (3 nuevas: simulación del plan óptimo entrega todo y
+  su distancia == óptimo; el límite alcanza a partida lenta; el límite no regala minutos).
+- Simulación real de las 30 partidas con el plan reconstruido del solver (Dijkstra con
+  padres): ejemplo nv1 opt=2/40 s, nv10 opt=21/110 s, nv30 opt=25/120 s (antes 120-320 s).
+- Panel sin badges ni colores por conteo; bajada manual (PISO 0 cuenta como movimiento);
+  pads y placa de lugares según capacidad; tarjetas animadas de desbloqueo; tutorial guiado
+  del nivel 1 con flecha al monstruo; victoria con stats dentro del recuadro; Rese sin voz
+  (mp3 eliminados, ~841 KB menos).

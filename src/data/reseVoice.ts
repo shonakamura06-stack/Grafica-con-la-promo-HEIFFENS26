@@ -1,4 +1,4 @@
-// Manifiesto de voz de Rese (generado con la voz elegida por el usuario).
+// Manifiesto de TEXTO de los diálogos de Rese (sin audio: el juego solo muestra texto).
 // t[i] = segundo en que empieza la línea i dentro del clip.
 export interface ReseClip { file: string; lines: string[]; t: number[]; dur: number }
 export const RESE_VOICE: Record<string, ReseClip> = {

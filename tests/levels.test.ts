@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { LEVELS, TOTAL_LEVELS } from '../src/data/levels';
 import { MONSTERS, MONSTER_MAP } from '../src/data/monsters';
-import { computeOptimal } from '../src/systems/scoring';
+import { computeOptimal, slowPlaySeconds, PlanStep } from '../src/systems/scoring';
 
 describe('datos de niveles', () => {
   it('hay exactamente 30 niveles con ids 1..30', () => {
@@ -66,7 +66,7 @@ describe('datos de niveles', () => {
 
   it('tiempo, vidas y averías tienen valores razonables', () => {
     for (const lvl of LEVELS) {
-      expect(lvl.timeLimit).toBeGreaterThanOrEqual(60);
+      expect(lvl.timeLimit).toBeGreaterThanOrEqual(30);
       expect(lvl.timeLimit).toBeLessThanOrEqual(600);
       expect([0, 3]).toContain(lvl.lives);
       expect(lvl.breakdownChance).toBeGreaterThanOrEqual(0);
@@ -128,4 +128,78 @@ describe('datos de monstruos', () => {
       expect(m.slots).toBeGreaterThanOrEqual(0);
     }
   });
+});
+
+describe('simulación real del plan óptimo (reglas del juego)', () => {
+  /** Reproduce el plan paso a paso con las mismas reglas que usa el juego. */
+  function simulate(level: (typeof LEVELS)[number], plan: PlanStep[]) {
+    const twinOf = (i: number): number => {
+      if (MONSTER_MAP[level.passengers[i].m].rule !== 'twins') return -1;
+      const twins = level.passengers.map((p, k) => (MONSTER_MAP[p.m].rule === 'twins' ? k : -1)).filter((k) => k >= 0);
+      const pos = twins.indexOf(i);
+      return twins[pos % 2 === 0 ? pos + 1 : pos - 1];
+    };
+    const coupleOf = (i: number): number => {
+      for (const [a, b] of level.couples) {
+        if (a === i) return b;
+        if (b === i) return a;
+      }
+      return -1;
+    };
+    let pos = 0;
+    let onboard: number[] = [];
+    const delivered = new Set<number>();
+    let distance = 0;
+    for (const step of plan) {
+      if (step.kind === 'board') {
+        if (pos !== 0) throw new Error(`nv ${level.id}: sube sin estar en recepción`);
+        const group = [step.pax];
+        const tw = twinOf(step.pax);
+        if (tw >= 0) group.push(tw);
+        const slots = [...onboard, ...group].reduce((t, i) => t + MONSTER_MAP[level.passengers[i].m].slots, 0);
+        if (slots > level.capacity) throw new Error(`nv ${level.id}: capacidad excedida`);
+        onboard.push(...group);
+      } else {
+        distance += Math.abs(step.floor - pos);
+        pos = step.floor;
+        const exiters = onboard.filter((i) => {
+          if (MONSTER_MAP[level.passengers[i].m].rule === 'shy' || true) {
+            if (level.passengers[i].d !== pos) return false;
+            const cp = coupleOf(i);
+            return cp < 0 || onboard.includes(cp);
+          }
+          return false;
+        });
+        exiters.forEach((i) => delivered.add(i));
+        onboard = onboard.filter((i) => !exiters.includes(i));
+      }
+    }
+    return { delivered, distance, onboard };
+  }
+
+  it('el plan óptimo entrega a TODOS respetando reglas y su distancia == óptimo', () => {
+    for (const lvl of LEVELS) {
+      const { optimal, plan } = computeOptimal(lvl);
+      const { delivered, distance, onboard } = simulate(lvl, plan);
+      expect(delivered.size, `nivel ${lvl.id}`).toBe(lvl.passengers.length);
+      expect(onboard.length, `nivel ${lvl.id}`).toBe(0);
+      expect(distance, `nivel ${lvl.id}`).toBe(optimal);
+    }
+  }, 60000);
+
+  it('el tiempo límite alcanza para una partida JUGADA LENTO siguiendo el óptimo', () => {
+    for (const lvl of LEVELS) {
+      const { optimal, plan } = computeOptimal(lvl);
+      const slow = slowPlaySeconds(plan, lvl.passengers.length, optimal);
+      expect(slow, `nivel ${lvl.id} lento=${Math.round(slow)}s`).toBeLessThanOrEqual(lvl.timeLimit);
+    }
+  }, 60000);
+
+  it('el tiempo límite ya no regala minutos: es < 2.2x la partida lenta', () => {
+    for (const lvl of LEVELS) {
+      const { optimal, plan } = computeOptimal(lvl);
+      const slow = slowPlaySeconds(plan, lvl.passengers.length, optimal);
+      expect(lvl.timeLimit, `nivel ${lvl.id}`).toBeLessThan(slow * 2.2);
+    }
+  }, 60000);
 });

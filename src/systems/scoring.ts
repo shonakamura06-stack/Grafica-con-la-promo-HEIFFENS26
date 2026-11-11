@@ -13,8 +13,41 @@
 import { LevelDef } from '../data/levels';
 import { MONSTER_MAP, TWIN_GROUP, Mood } from '../data/monsters';
 
+export type PlanStep =
+  | { kind: 'board'; pax: number }   // sube el pasajero i (gemelos: suben juntos)
+  | { kind: 'move'; floor: number }; // viaja al piso f (los de destino f bajan)
+
 export interface SolveResult {
-  optimal: number; // distancia mínima posible
+  optimal: number;      // distancia mínima posible
+  plan: PlanStep[];     // secuencia óptima de acciones para lograrla
+}
+
+/**
+ * Simulación de partida a velocidad LENTA de niño (segundos):
+ * leer la escena al iniciar, pensar y tocar cada monstruo, pensar y tocar
+ * cada botón del panel, esperar puertas/recorrido, y ver bajar a cada uno.
+ * Con esta tabla se calibran los timeLimit de los niveles.
+ */
+export const SLOW = {
+  readLevel: 8,      // mirar el nivel al empezar
+  tapMonster: 4,     // pensar + tocar un monstruo para que suba
+  pressButton: 3,    // pensar + tocar un botón del panel
+  doors: 0.24,       // cierre/apertura de puertas
+  travelPerFloor: 0.38, // animación del ascensor por piso
+  reactAfterMove: 1.5, // reaccionar al llegar
+  watchExit: 1.5,    // ver bajar a cada monstruo
+  celebrate: 4,      // leer la pantalla final
+};
+
+export function slowPlaySeconds(plan: PlanStep[], passengers: number, optimal: number): number {
+  let t = SLOW.readLevel + SLOW.celebrate;
+  for (const step of plan) {
+    if (step.kind === 'board') t += SLOW.tapMonster;
+    else t += SLOW.pressButton + SLOW.doors + SLOW.reactAfterMove;
+  }
+  t += optimal * SLOW.travelPerFloor;
+  t += passengers * SLOW.watchExit;
+  return t;
 }
 
 interface PassengerInfo {
@@ -100,6 +133,7 @@ export function computeOptimal(level: LevelDef): SolveResult {
 
   // dist: mapa estado -> distancia. Estado = delivered|onboard|pos
   const dist = new Map<number, number>();
+  const parent = new Map<number, [number, PlanStep]>(); // estado -> [previo, acción]
   const heap: Array<[number, number]> = []; // [distancia, estado]
 
   const key = (delivered: number, onboard: number, pos: number) =>
@@ -146,12 +180,24 @@ export function computeOptimal(level: LevelDef): SolveResult {
     const onboard = rest % (1 << n);
     const delivered = Math.floor(rest / (1 << n));
 
-    if (delivered === full) return { optimal: d };
+    if (delivered === full) {
+      // Reconstruir el plan hacia atrás desde el estado final.
+      const plan: PlanStep[] = [];
+      let cur = state;
+      while (parent.has(cur)) {
+        const [prev, act] = parent.get(cur)!;
+        plan.push(act);
+        cur = prev;
+      }
+      plan.reverse();
+      return { optimal: d, plan };
+    }
 
-    const relax = (nd: number, ndelivered: number, nonboard: number, npos: number) => {
+    const relax = (nd: number, ndelivered: number, nonboard: number, npos: number, act: PlanStep) => {
       const k = key(ndelivered, nonboard, npos);
       if (nd < (dist.get(k) ?? Infinity)) {
         dist.set(k, nd);
+        parent.set(k, [state, act]);
         push(nd, k);
       }
     };
@@ -166,7 +212,7 @@ export function computeOptimal(level: LevelDef): SolveResult {
         if (infos[i].rule === 'twins' && infos[i].twinPair >= 0) {
           next |= 1 << infos[i].twinPair;
         }
-        relax(d, delivered, next, 0);
+        relax(d, delivered, next, 0, { kind: 'board', pax: i });
       }
     }
 
@@ -183,12 +229,12 @@ export function computeOptimal(level: LevelDef): SolveResult {
           nonboard &= ~(1 << i);
         }
       }
-      relax(d + Math.abs(f - pos), ndelivered, nonboard, f);
+      relax(d + Math.abs(f - pos), ndelivered, nonboard, f, { kind: 'move', floor: f });
     }
   }
 
   // Si no se encontró solución (no debería pasar), se devuelve un valor alto.
-  return { optimal: Number.MAX_SAFE_INTEGER };
+  return { optimal: Number.MAX_SAFE_INTEGER, plan: [] };
 }
 
 /**

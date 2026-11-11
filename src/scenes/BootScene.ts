@@ -11,7 +11,6 @@
 
 import Phaser from 'phaser';
 import { MONSTERS, Mood } from '../data/monsters';
-import { RESE_VOICE } from '../data/reseVoice';
 
 const T = 128; // tamaño de textura de monstruo
 const C = T / 2;
@@ -628,7 +627,6 @@ export default class BootScene extends Phaser.Scene {
 
   preload(): void {
     // Clips de voz de Rese (la voz elegida para el juego).
-    Object.entries(RESE_VOICE).forEach(([key, clip]) => this.load.audio(key, clip.file));
     // Sprite de Rese: el prototipo elegido por el usuario (fondo transparente).
     this.load.image('rese', 'img/rese.png');
   }
