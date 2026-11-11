@@ -162,8 +162,10 @@ export default class ShopScene extends Phaser.Scene {
   }
 
   /** Vista previa REAL del objeto (mismo dibujo que se aplica en el juego). */
-  private drawPreview(item: ShopItem, x: number, y: number, w: number, h: number): void {
+  private drawPreview(item: ShopItem, x: number, y: number, w: number, h: number): Phaser.GameObjects.GameObject[] {
+    const creados: Phaser.GameObjects.GameObject[] = [];
     const g = this.add.graphics();
+    creados.push(g);
     const left = x - w / 2;
     const top = y - h / 2;
 
@@ -221,6 +223,8 @@ export default class ShopScene extends Phaser.Scene {
       const fake: SaveData = { ...this.save, custom: { ...this.save.custom, accessory: item.id } };
       const deco = decorateRese(this, img, fake);
       if (deco) deco.setDepth(2);
+      creados.push(img);
+      if (deco) creados.push(deco);
     } else if (item.slot === 'monsterAcc') {
       g.fillStyle(0xfde9f3, 1);
       g.fillRoundedRect(left, top, w, h, 12);
@@ -228,6 +232,8 @@ export default class ShopScene extends Phaser.Scene {
       const fake: SaveData = { ...this.save, custom: { ...this.save.custom, monsterAcc: item.id } };
       const acc = monsterAccessory(this, fake, img.displayWidth);
       if (acc) { acc.setPosition(x, y - img.displayHeight * 0.34).setDepth(2); }
+      creados.push(img);
+      if (acc) creados.push(acc);
     } else if (item.slot === 'decor') {
       g.fillStyle(0xfff4e0, 1);
       g.fillRoundedRect(left, top, w, h, 12);
@@ -260,7 +266,7 @@ export default class ShopScene extends Phaser.Scene {
         g.fillStyle([0xfbbf24, 0xffffff, 0xfde68a][i % 3], 0.9);
         g.fillCircle(left + 10 + Math.random() * (w - 20), top + 8 + Math.random() * (h - 16), 1.6 + Math.random() * 2.4);
       }
-      makeText(this, x, y, '★', 40, '#fbbf24');
+      creados.push(makeText(this, x, y, '★', 40, '#fbbf24'));
     } else {
       // Paquete: caja de regalo con todo el contenido
       g.fillStyle(0xf3e8ff, 1);
@@ -275,10 +281,11 @@ export default class ShopScene extends Phaser.Scene {
       g.fillStyle(0xfde68a, 1);
       g.fillTriangle(x - 22, y - 26, x, y - 46, x + 4, y - 26);
       g.fillTriangle(x + 22, y - 26, x, y - 46, x - 4, y - 26);
-      makeText(this, x, y + 56, `${item.includes?.length ?? 0} objetos`, 13, '#8a6fd0', false);
+      creados.push(makeText(this, x, y + 56, `${item.includes?.length ?? 0} objetos`, 13, '#8a6fd0', false));
     }
     g.lineStyle(2, 0x00000020, 1);
     g.strokeRoundedRect(left, top, w, h, 12);
+    return creados;
   }
 
   /** Ficha del objeto: vista previa grande, descripción y acciones. */
@@ -293,7 +300,7 @@ export default class ShopScene extends Phaser.Scene {
     c.add(makeText(this, W / 2, H / 2 - 268, item.name, 25, '#6b4423'));
     c.add(makeText(this, W / 2, H / 2 - 236, item.desc, 14, '#8a6fd0', false));
 
-    this.drawPreview(item, W / 2, H / 2 - 110, 380, 200);
+    const preview = this.drawPreview(item, W / 2, H / 2 - 110, 380, 200);
 
     const status = equipped ? '✓ Equipado ahora mismo'
       : owned ? 'Ya es tuyo: puedes equiparlo cuando quieras'
@@ -302,12 +309,12 @@ export default class ShopScene extends Phaser.Scene {
     c.add(makeText(this, W / 2, H / 2 + 20, status, 16, '#a06a35', false));
     c.add(makeText(this, W / 2, H / 2 + 46, 'Es solo decoración: no cambia el puzle ni las estrellas.', 13, '#8a6fd0', false));
 
-    const close = () => c.destroy();
+    const close = () => { preview.forEach((o) => o.destroy()); c.destroy(); };
 
     if (!owned && item.source === 'coins') {
       c.add(makeButton(this, W / 2, H / 2 + 104, 340, 62, item.price === 0 ? 'OBTENER GRATIS' : `COMPRAR · ${item.price} 🪙`, {
         bg: COLORS.accent, fontSize: 20,
-        onClick: () => this.confirmPurchase(item, c),
+        onClick: () => this.confirmPurchase(item, close),
       }));
     } else if (owned && !equipped) {
       c.add(makeButton(this, W / 2, H / 2 + 104, 340, 62, 'EQUIPAR', {
@@ -348,8 +355,8 @@ export default class ShopScene extends Phaser.Scene {
   }
 
   /** Confirmación explícita antes de gastar monedas. */
-  private confirmPurchase(item: ShopItem, parent: Phaser.GameObjects.Container): void {
-    if (item.price === 0) { this.doPurchase(item, parent); return; }
+  private confirmPurchase(item: ShopItem, closeDetail: () => void): void {
+    if (item.price === 0) { closeDetail(); this.doPurchase(item); return; }
     const c = this.add.container(0, 0).setDepth(70);
     c.add(this.add.rectangle(0, 0, W, H, 0x000000, 0.5).setOrigin(0).setInteractive());
     c.add(makePanel(this, W / 2, H / 2, 420, 330));
@@ -358,7 +365,7 @@ export default class ShopScene extends Phaser.Scene {
     c.add(makeText(this, W / 2, H / 2 - 40, `Gastarás ${item.price} monedas de tus ${this.save.coins}.`, 15, '#a06a35', false));
     c.add(makeText(this, W / 2, H / 2 - 14, 'Te quedarán ' + (this.save.coins - item.price) + ' monedas.', 15, '#a06a35', false));
     c.add(makeButton(this, W / 2 - 100, H / 2 + 52, 180, 58, 'SÍ, COMPRAR', {
-      bg: COLORS.accent, fontSize: 17, onClick: () => { c.destroy(); this.doPurchase(item, parent); },
+      bg: COLORS.accent, fontSize: 17, onClick: () => { c.destroy(); closeDetail(); this.doPurchase(item); },
     }));
     c.add(makeButton(this, W / 2 + 100, H / 2 + 52, 180, 58, 'MEJOR NO', {
       bg: COLORS.purple, fontSize: 17, onClick: () => c.destroy(),
@@ -368,7 +375,7 @@ export default class ShopScene extends Phaser.Scene {
     this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 200, ease: 'Back.easeOut' });
   }
 
-  private doPurchase(item: ShopItem, parent: Phaser.GameObjects.Container): void {
+  private doPurchase(item: ShopItem): void {
     const result = buyItem(this.save, item.id);
     if (!result.ok) {
       audio.error();
@@ -384,7 +391,6 @@ export default class ShopScene extends Phaser.Scene {
     if (item.slot !== 'pack') equipItem(this.save, item.id);
     writeSave(this.save);
     audio.coin();
-    parent.destroy();
     this.purchaseAnimation(item, result.granted.length);
   }
 
