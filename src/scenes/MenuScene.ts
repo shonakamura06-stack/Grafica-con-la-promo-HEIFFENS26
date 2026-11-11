@@ -5,7 +5,7 @@
  */
 
 import Phaser from 'phaser';
-import { loadSave } from '../systems/save';
+import { loadSave, writeSave, claimDaily, DAILY_COINS, DAILY_HEART } from '../systems/save';
 import { makeButton, makeCoins, makeText, makeWoodSign, makePanel, COLORS } from '../systems/ui';
 import qrcode from 'qrcode-generator';
 import { audio } from '../systems/audio';
@@ -18,6 +18,12 @@ export default class MenuScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.fadeIn(320);
     const save = loadSave();
+    // Regalo diario: una vez por día, monedas + 1 corazón.
+    const today = new Date().toISOString().slice(0, 10);
+    if (claimDaily(save, today)) {
+      writeSave(save);
+      this.time.delayedCall(600, () => this.showDailyGift());
+    }
     audio.ensure();
     this.input.once('pointerdown', () => {
       audio.ensure();
@@ -130,6 +136,35 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     makeText(this, W / 2, H - 14, 'Un juego de ascensor para toda la familia · v1.0', 13, '#a06a35', false);
+  }
+
+  /** Popup animado del regalo diario. */
+  private showDailyGift(): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const c = this.add.container(0, 0).setDepth(80);
+    const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.5).setOrigin(0).setInteractive();
+    c.add(dim);
+    c.add(makePanel(this, W / 2, H / 2, 400, 380));
+    const t = this.add.text(W / 2, H / 2 - 130, '¡REGALO DIARIO!', {
+      fontFamily: 'Arial Black, Impact, sans-serif', fontSize: '30px', color: '#FDBB2D',
+      stroke: '#6D3A14', strokeThickness: 8,
+    }).setOrigin(0.5);
+    c.add(t);
+    const coin = this.add.image(W / 2 - 70, H / 2 - 20, 'coin').setScale(1.2);
+    const heart = this.add.image(W / 2 - 70, H / 2 + 50, 'heart').setScale(1.1);
+    c.add([coin, heart]);
+    c.add(makeText(this, W / 2 + 30, H / 2 - 20, `+${DAILY_COINS} monedas`, 22, '#6b4423'));
+    c.add(makeText(this, W / 2 + 30, H / 2 + 50, `+${DAILY_HEART} corazón`, 22, '#6b4423'));
+    c.add(makeText(this, W / 2, H / 2 + 130, 'Vuelve mañana por otro · toca para cerrar', 14, '#8a6fd0', false));
+    c.setScale(0.4).setAlpha(0);
+    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 380, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: coin, angle: 360, duration: 1200, repeat: -1, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: heart, scale: 1.3, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    dim.on('pointerdown', () => {
+      audio.click();
+      this.tweens.add({ targets: c, scale: 0.7, alpha: 0, duration: 200, onComplete: () => c.destroy() });
+    });
   }
 
   /** Panel con código QR de la URL pública para abrir el juego en el celular. */

@@ -156,3 +156,11 @@ PWA, Service Worker e iconos 192/512.
 - Rese ya no interrumpe por piso equivocado; solo explica errores de trato de personajes
   (parejas, enemigos, tímido, miedoso) y perdona solo esa primera estrella.
 - Récord redefinido a récord personal (save.bestDistance); perfecto = óptimo exacto.
+
+## Actualización: economía v2
+
+- `npm test`: **53/53 pruebas pasan** (lives.test reescrito: regen 1/hora, compra con
+  monedas, regalo diario una vez por día, premium, reparación de saves viejos).
+- Corazones: regen lenta (REGEN_MS = 1 h por corazón), addHeart, buyHeartWithCoins(150),
+  claimDaily(+40 🪙 +1 ❤) con popup animado en el menú; anuncio de recompensa ahora da +1 ❤.
+- Nuevo `docs/ECONOMIA.md`: fuentes/sumideros, precios y política anti-manipulativa.

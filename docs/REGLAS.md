@@ -171,3 +171,10 @@ una tarjeta visual. Después queda registrada en el álbum.
 
 - Globos cartoon: picos irregulares, contorno grueso oscuro, sombra gris desplazada y
   cola que apunta al que habla (estilo grito de cómic).
+
+## Economía v2 (corazones escasos) — reemplaza la sección de 25 min
+
+- Regeneración: **1 corazón por hora** (ya no 3 en 25 min).
+- Con 0 corazones: **anuncio +1 ❤**, **comprar 1 ❤ por 150 monedas**, **premium 19,99 Bs/mes**
+  o esperar la hora. Detalles y justificación de precios en `docs/ECONOMIA.md`.
+- **Regalo diario** en el menú: +40 monedas y +1 corazón, una vez por día (doble con premium).

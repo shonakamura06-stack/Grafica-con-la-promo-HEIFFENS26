@@ -34,6 +34,7 @@ export interface SaveData {
   premiumUntil: number;               // ms epoch: vidas infinitas sin anuncios; 0 = sin premium
   adsWatched: number;                 // anuncios de recompensa vistos (estadística)
   bestDistance: Record<number, number>; // nivel -> mejor distancia personal
+  lastDaily: string;                  // 'YYYY-MM-DD' del último regalo diario
 }
 
 const KEY = 'piso-equivocado-save-v1';
@@ -55,6 +56,7 @@ export function defaultSave(): SaveData {
     premiumUntil: 0,
     adsWatched: 0,
     bestDistance: {},
+    lastDaily: '',
   };
 }
 
@@ -78,6 +80,7 @@ export function loadSave(): SaveData {
       premiumUntil: typeof parsed.premiumUntil === 'number' ? parsed.premiumUntil : 0,
       adsWatched: typeof parsed.adsWatched === 'number' ? parsed.adsWatched : 0,
       bestDistance: typeof parsed.bestDistance === 'object' && parsed.bestDistance !== null ? parsed.bestDistance : {},
+      lastDaily: typeof parsed.lastDaily === 'string' ? parsed.lastDaily : '',
       version: SAVE_VERSION,
     };
     // Validación extra: si algún dato viene corrupto, se corrige.
@@ -160,20 +163,47 @@ export function getCustomOption(category: keyof Customization, id: string): Cust
 
 
 // ── Economía de corazones (vidas) ──────────────────────────────────────────
-export const REFILL_MS = 25 * 60 * 1000;   // 25 minutos para recuperar los 3 corazones
+export const REGEN_MS = 60 * 60 * 1000;   // 1 corazón por hora (nada regalado)
+export const REFILL_MS = REGEN_MS;        // compatibilidad: tiempo por corazón
 export const PREMIUM_MS = 30 * 24 * 60 * 60 * 1000; // 1 mes de vidas infinitas
+export const HEART_COIN_COST = 150;       // precio de 1 corazón en monedas
+export const DAILY_COINS = 40;            // regalo diario
+export const DAILY_HEART = 1;             // corazón del regalo diario
 
 export function isPremium(save: SaveData, now: number = Date.now()): boolean {
   return save.premiumUntil > now;
 }
 
-/** Si pasó el tiempo de espera, recarga los 3 corazones. */
+/** Regeneración LENTA: 1 corazón por hora hasta 3 (nada de recarga completa). */
 export function tickHearts(save: SaveData, now: number = Date.now()): SaveData {
-  if (!isPremium(save, now) && save.hearts <= 0 && save.heartsRefillAt > 0 && now >= save.heartsRefillAt) {
+  if (isPremium(save, now)) {
     save.hearts = 3;
     save.heartsRefillAt = 0;
+    return save;
   }
+  while (save.hearts < 3 && save.heartsRefillAt > 0 && now >= save.heartsRefillAt) {
+    save.hearts += 1;
+    save.heartsRefillAt = save.hearts < 3 ? save.heartsRefillAt + REGEN_MS : 0;
+  }
+  if (save.hearts >= 3) save.heartsRefillAt = 0;
   return save;
+}
+
+/** Suma un corazón (anuncio, regalo diario o compra). */
+export function addHeart(save: SaveData, now: number = Date.now()): number {
+  save.hearts = Math.min(3, save.hearts + 1);
+  if (save.hearts < 3 && save.heartsRefillAt === 0) save.heartsRefillAt = now + REGEN_MS;
+  if (save.hearts >= 3) save.heartsRefillAt = 0;
+  return save.hearts;
+}
+
+/** Compra 1 corazón con monedas ganadas jugando (sumidero de la economía). */
+export function buyHeartWithCoins(save: SaveData, now: number = Date.now()): boolean {
+  tickHearts(save, now);
+  if (save.hearts >= 3 || save.coins < HEART_COIN_COST) return false;
+  save.coins -= HEART_COIN_COST;
+  addHeart(save, now);
+  return true;
 }
 
 /** Gasta un corazón global. Devuelve los corazones restantes. */
@@ -181,14 +211,17 @@ export function spendHeart(save: SaveData, now: number = Date.now()): number {
   if (isPremium(save, now)) return 3;
   tickHearts(save, now);
   save.hearts = Math.max(0, save.hearts - 1);
-  if (save.hearts === 0) save.heartsRefillAt = now + REFILL_MS;
+  if (save.hearts < 3 && save.heartsRefillAt === 0) save.heartsRefillAt = now + REGEN_MS;
   return save.hearts;
 }
 
-/** Recarga inmediata (por anuncio de recompensa). */
-export function refillHearts(save: SaveData): void {
-  save.hearts = 3;
-  save.heartsRefillAt = 0;
+/** Regalo diario: una vez por día, monedas + 1 corazón. */
+export function claimDaily(save: SaveData, today: string, now: number = Date.now()): boolean {
+  if (save.lastDaily === today) return false;
+  save.lastDaily = today;
+  save.coins += DAILY_COINS;
+  addHeart(save, now);
+  return true;
 }
 
 export function formatMs(ms: number): string {
