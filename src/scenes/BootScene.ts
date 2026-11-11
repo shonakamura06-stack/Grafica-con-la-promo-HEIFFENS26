@@ -11,6 +11,7 @@
 
 import Phaser from 'phaser';
 import { MONSTERS, Mood } from '../data/monsters';
+import { RESE_VOICE } from '../data/reseVoice';
 
 const T = 128; // tamaño de textura de monstruo
 const C = T / 2;
@@ -601,6 +602,13 @@ export default class BootScene extends Phaser.Scene {
     super('boot');
   }
 
+  preload(): void {
+    // Clips de voz de Rese (la voz elegida para el juego).
+    Object.entries(RESE_VOICE).forEach(([key, clip]) => this.load.audio(key, clip.file));
+    // Sprite de Rese: el prototipo elegido por el usuario (fondo transparente).
+    this.load.image('rese', 'img/rese.png');
+  }
+
   create(): void {
     // Monstruos en 3 ánimos: feliz (base), neutral y enojado.
     const moods: Mood[] = ['happy', 'neutral', 'angry'];
@@ -614,49 +622,6 @@ export default class BootScene extends Phaser.Scene {
       }
     }
 
-    // Recepcionista Rese: monigote con uniforme, pajarita e identificación
-    {
-      const g = this.add.graphics();
-      // Cuerpo con uniforme azul de recepcionista
-      g.fillStyle(0x3b82f6, 1);
-      g.fillRoundedRect(C - 26, 52, 52, 62, 12);
-      outlineEllipse(g, C, 82, 52, 62);
-      // Camisa blanca
-      g.fillStyle(0xffffff, 1);
-      g.fillTriangle(C - 12, 54, C + 12, 54, C, 74);
-      // Pajarita roja
-      g.fillStyle(0xef4444, 1);
-      g.fillTriangle(C - 2, 58, C - 14, 52, C - 14, 64);
-      g.fillTriangle(C + 2, 58, C + 14, 52, C + 14, 64);
-      g.fillCircle(C, 58, 4);
-      // Identificación (placa dorada)
-      g.fillStyle(0xffd678, 1);
-      g.fillRoundedRect(C + 8, 76, 14, 10, 2);
-      g.fillStyle(0x1e293b, 1);
-      g.fillRect(C + 10, 79, 10, 2);
-      // Cabeza
-      g.fillStyle(0xfde68a, 1);
-      g.fillCircle(C, 34, 24);
-      outlineCircle(g, C, 34, 24);
-      // Gorro de recepcionista
-      g.fillStyle(0x1e3a8a, 1);
-      g.fillEllipse(C, 16, 40, 14);
-      g.fillStyle(0xffd678, 1);
-      g.fillEllipse(C, 20, 42, 6);
-      eye(g, C - 9, 36, 7, 4);
-      eye(g, C + 9, 36, 7, 4);
-      mouth(g, 'happy', C, 46, 8);
-      cheeks(g, C, 46, 16);
-      // Brazos saludando
-      g.lineStyle(6, 0x3b82f6, 1);
-      g.beginPath(); g.moveTo(C - 24, 62); g.lineTo(C - 36, 48); g.strokePath();
-      g.beginPath(); g.moveTo(C + 24, 62); g.lineTo(C + 36, 48); g.strokePath();
-      g.fillStyle(0xfde68a, 1);
-      g.fillCircle(C - 37, 46, 6);
-      g.fillCircle(C + 37, 46, 6);
-      g.generateTexture('rese', T, T);
-      g.destroy();
-    }
     // Nube con carita (decoración del cielo)
     {
       const g = this.add.graphics();

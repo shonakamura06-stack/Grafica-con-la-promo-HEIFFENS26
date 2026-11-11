@@ -81,3 +81,20 @@ una tarjeta visual. Después queda registrada en el álbum.
 - Botón de pausa en la esquina superior izquierda.
 - Reinicio de nivel desde el menú de pausa.
 - Ajustes: sonido, música y vibración por separado.
+
+## Rese, el recepcionista (tutorial y perdón)
+
+- **Diseño**: monstruo azul oscuro con traje y pajarita roja (sprite `public/img/rese.png`,
+  prototipo elegido por el usuario entre varias opciones).
+- **Voz**: clips reales en `public/audio/rese/*.mp3` (voz elegida por el usuario);
+  el manifiesto `src/data/reseVoice.ts` sincroniza cada línea de texto con su segundo exacto.
+- **Aparición**: sube desde abajo hasta ocupar media pantalla, con fondo oscurecido,
+  globo de diálogo y botón SALTAR. El temporizador se pausa mientras explica.
+- **Cuándo explica**: solo en el nivel 1 o la primera vez que aparece una mecánica nueva
+  (parejas, corazones/vidas, enemigos, maletas de Maletero, averías).
+- **Repaso**: en el menú de PAUSA, el botón «RESE TE EXPLICA» repite la explicación del nivel.
+- **Perdón**: la primera equivocación del nivel (piso equivocado, enemigos juntos o pareja
+  separada) hace reaparecer a Rese UNA sola vez y **no cuesta estrella**:
+  - piso equivocado: se perdonan 2 movimientos en el cálculo de estrellas;
+  - enemigos juntos o pareja separada: no suma `ruleBreaks`/`separations` esa vez.
+  Las siguientes equivocaciones sí penalizan normal.

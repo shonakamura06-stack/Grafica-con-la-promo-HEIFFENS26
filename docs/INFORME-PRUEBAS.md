@@ -109,3 +109,14 @@ PWA, Service Worker e iconos 192/512.
   navegadores móviles (arranca tras el primer toque).
 - Rendimiento: sin peticiones de red durante la partida; animaciones con
   tweens; objetivo 60 FPS. No se midió FPS en un dispositivo físico.
+
+## Actualización: Rese con voz y tutorial (rama actual)
+
+- `npm test`: **41/41 pruebas pasan**; `npm run build` sin errores.
+- Servidor dev: `/`, `/img/rese.png` y `/audio/rese/tut1.mp3` responden HTTP 200.
+- Voz de Rese: 9 clips generados con la voz seleccionada por el usuario (841 KB en total);
+  sincronización línea a línea medida con mutagen y volcada en `src/data/reseVoice.ts`.
+- Sprite de Rese: prototipo elegido recortado a 460×460 con fondo transparente (225 KB).
+- Tutorial: se activa solo en nivel 1 o con mecánica nueva; pausa el temporizador;
+  botón SALTAR y repaso desde PAUSA («RESE TE EXPLICA»).
+- Perdón: la primera equivocación del nivel no resta estrella (una sola vez por nivel).

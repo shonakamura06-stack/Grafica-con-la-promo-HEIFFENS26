@@ -214,9 +214,16 @@ export function isPerfect(distance: number, optimal: number): boolean {
   return distance === optimal;
 }
 
-export function coinsFor(stars: number, perfect = false): number {
+export function coinsFor(stars: number, perfect = false, record = false): number {
   const base = 6 + stars * 4;
-  return perfect ? base + 10 : base;
+  if (record) return base + 150; // ¡Batió el récord calculado! ¡Un genio!
+  if (perfect) return base + 50; // Solución óptima exacta.
+  return base;
+}
+
+/** ¿Batió el récord (distancia menor que el óptimo calculado)? */
+export function isRecord(distance: number, optimal: number): boolean {
+  return distance < optimal;
 }
 
 /**

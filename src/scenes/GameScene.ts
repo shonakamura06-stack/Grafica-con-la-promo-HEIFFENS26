@@ -18,13 +18,14 @@
  */
 
 import Phaser from 'phaser';
-import { getLevel, LevelDef, TOTAL_LEVELS } from '../data/levels';
+import { getLevel, LEVELS, LevelDef, TOTAL_LEVELS } from '../data/levels';
 import { MONSTER_MAP, MonsterDef, TWIN_GROUP, Mood, floorColor } from '../data/monsters';
 import { loadSave, writeSave, SaveData, getCustomOption } from '../systems/save';
-import { computeOptimal, starsFor, coinsFor, isPerfect, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
+import { computeOptimal, starsFor, coinsFor, isPerfect, isRecord, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
 import { queueLine, arrivalLine, pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTIONIST_LINES } from '../data/dialogues';
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
+import { RESE_VOICE } from '../data/reseVoice';
 
 type PaxState = 'queue' | 'boarding' | 'onboard' | 'exiting' | 'delivered';
 
@@ -51,7 +52,7 @@ const H = 960;
 // - Columna 4 (x 405-540): tablero de pisos
 const BUILD_LEFT = 12;
 const BUILD_RIGHT = 258;
-const BUILD_TOP = 130;
+const FLOOR_H = 114; // altura FIJA de cada piso (la ideal de 5 pisos)
 const LOBBY_TOP = 700; // la planta baja (piso 0) empieza aquí
 const BUILD_BOTTOM = 780;
 const CAB_X = 337; // centro de la columna 3
@@ -103,6 +104,7 @@ export default class GameScene extends Phaser.Scene {
   private timeBar!: Phaser.GameObjects.Graphics;
   private timerEvent?: Phaser.Time.TimerEvent;
   private separations = 0;         // parejas separadas (cada una resta 1 estrella)
+  private ruleBreaks = 0;          // reglas rotas (enemigos juntos, etc.)
   private coupleOf = new Map<number, number>(); // pasajero -> su pareja
   private enemiesOf = new Map<number, number[]>(); // pasajero -> enemigos
   private breakdownDone = false;   // ya ocurrió la avería en este nivel
@@ -111,6 +113,17 @@ export default class GameScene extends Phaser.Scene {
   private receptionist!: Phaser.GameObjects.Container;
   private receptionistText!: Phaser.GameObjects.Text;
   private receptionistBg!: Phaser.GameObjects.Graphics;
+  private reseImg!: Phaser.GameObjects.Image;
+  private tutorialDone = false;    // ya se explicó este nivel
+  private forgiven = false;        // Rese ya perdonó un error en este nivel
+  private reseActive = false;
+  private reseClipKey = '';
+  private reseEvents: Phaser.Time.TimerEvent[] = [];
+  private tutorialKey = 'tut1';
+  private reseSkipBtn!: Phaser.GameObjects.Container;
+  private reseOverlay!: Phaser.GameObjects.Rectangle;
+  private reseHint!: Phaser.GameObjects.Text;
+  private forgiveMoves = 0;        // movimientos que Rese perdona en la estrella
 
   constructor() {
     super('game');
@@ -135,6 +148,11 @@ export default class GameScene extends Phaser.Scene {
     this.livesIcons = [];
     this.timeLeft = this.level.timeLimit;
     this.separations = 0;
+    this.ruleBreaks = 0;
+    this.forgiven = false;
+    this.forgiveMoves = 0;
+    this.tutorialDone = false;
+    this.reseActive = false;
     this.coupleOf.clear();
     this.enemiesOf.clear();
     this.breakdownDone = false;
@@ -143,8 +161,13 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ── Geometría ────────────────────────────────────────────────────────────
+  /** Altura de piso FIJA: el edificio es más bajo con menos pisos. */
   private fh(): number {
-    return (LOBBY_TOP - BUILD_TOP) / this.level.floors;
+    return FLOOR_H;
+  }
+  /** Parte superior del edificio según el número de pisos del nivel. */
+  private buildTop(): number {
+    return LOBBY_TOP - this.level.floors * FLOOR_H;
   }
   private bandBottom(f: number): number {
     if (f === 0) return BUILD_BOTTOM;
@@ -226,7 +249,7 @@ export default class GameScene extends Phaser.Scene {
     });
     this.cable.clear();
     this.cable.lineStyle(3, 0x7c4f24, 0.9);
-    this.cable.lineBetween(CAB_X, BUILD_TOP + 22, this.cab.x, this.cab.y - CAB_H / 2 - 6);
+    this.cable.lineBetween(CAB_X, this.buildTop() + 22, this.cab.x, this.cab.y - CAB_H / 2 - 6);
   }
 
   // ── Cielo y nubes ────────────────────────────────────────────────────────
@@ -256,25 +279,26 @@ export default class GameScene extends Phaser.Scene {
     const wallpaper = getCustomOption('wallpaper', this.save.custom.wallpaper).color;
     const N = this.level.floors;
     const fh = this.fh();
+    const top = this.buildTop();
     const V = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
 
     const g = this.add.graphics();
     // Sombra del edificio
     g.fillStyle(0x000000, 0.1);
-    g.fillRoundedRect(BUILD_LEFT + 6, BUILD_TOP + 8, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 14);
+    g.fillRoundedRect(BUILD_LEFT + 6, top + 8, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - top, 14);
     // Techo en 3D: cara superior en perspectiva + franja frontal rosa
     g.fillStyle(0xfbcfe8, 1);
-    g.fillPoints([V(BUILD_LEFT, BUILD_TOP), V(BUILD_RIGHT, BUILD_TOP), V(BUILD_RIGHT + 10, BUILD_TOP - 12), V(BUILD_LEFT + 10, BUILD_TOP - 12)], true);
+    g.fillPoints([V(BUILD_LEFT, top), V(BUILD_RIGHT, top), V(BUILD_RIGHT + 10, top - 12), V(BUILD_LEFT + 10, top - 12)], true);
     g.fillStyle(0xf9a8d4, 1);
-    g.fillRoundedRect(BUILD_LEFT - 2, BUILD_TOP - 9, BUILD_RIGHT - BUILD_LEFT + 4, 14, 7);
+    g.fillRoundedRect(BUILD_LEFT - 2, top - 9, BUILD_RIGHT - BUILD_LEFT + 4, 14, 7);
     g.fillStyle(0xffffff, 0.5);
-    g.fillRect(BUILD_LEFT + 4, BUILD_TOP - 7, BUILD_RIGHT - BUILD_LEFT - 8, 4);
+    g.fillRect(BUILD_LEFT + 4, top - 7, BUILD_RIGHT - BUILD_LEFT - 8, 4);
     // Fachada crema
     g.fillStyle(wallpaper, 1);
-    g.fillRoundedRect(BUILD_LEFT, BUILD_TOP, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 14);
+    g.fillRoundedRect(BUILD_LEFT, top, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - top, 14);
     // Pared lateral derecha (profundidad)
     g.fillStyle(0x000000, 0.08);
-    g.fillPoints([V(BUILD_RIGHT - 14, BUILD_TOP + 8), V(BUILD_RIGHT, BUILD_TOP + 8), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 14, BUILD_BOTTOM)], true);
+    g.fillPoints([V(BUILD_RIGHT - 14, top + 8), V(BUILD_RIGHT, top + 8), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 14, BUILD_BOTTOM)], true);
     // Zócalo inferior
     g.fillStyle(0xf5d9a8, 1);
     g.fillRect(BUILD_LEFT, BUILD_BOTTOM - 12, BUILD_RIGHT - BUILD_LEFT, 12);
@@ -320,22 +344,22 @@ export default class GameScene extends Phaser.Scene {
 
     // ── Torre de cristal del ascensor (columna 3) ──
     g.fillGradientStyle(0xeaf7ff, 0xeaf7ff, 0xbfe8ff, 0xbfe8ff, 0.5, 0.5, 0.3, 0.3);
-    g.fillRect(SHAFT_LEFT, BUILD_TOP + 4, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 4);
+    g.fillRect(SHAFT_LEFT, top + 4, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - top - 4);
     g.fillStyle(0xffffff, 0.25);
-    g.fillRect(SHAFT_LEFT + 8, BUILD_TOP + 4, 10, BUILD_BOTTOM - BUILD_TOP - 4);
+    g.fillRect(SHAFT_LEFT + 8, top + 4, 10, BUILD_BOTTOM - top - 4);
     g.lineStyle(4, 0x5a7a8a, 0.8);
     for (let f = 1; f <= N; f++) {
       g.lineBetween(SHAFT_LEFT, this.bandBottom(f), SHAFT_RIGHT, this.bandBottom(f));
     }
     g.lineStyle(3, 0x5a7a8a, 0.5);
-    g.lineBetween(CAB_X, BUILD_TOP + 4, CAB_X, BUILD_BOTTOM);
+    g.lineBetween(CAB_X, top + 4, CAB_X, BUILD_BOTTOM);
     g.lineStyle(4, 0x5a7a8a, 1);
-    g.strokeRect(SHAFT_LEFT, BUILD_TOP + 4, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 4);
+    g.strokeRect(SHAFT_LEFT, top + 4, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - top - 4);
     g.fillStyle(0x8a7a5a, 1);
-    g.fillRoundedRect(SHAFT_LEFT - 5, BUILD_TOP - 2, SHAFT_RIGHT - SHAFT_LEFT + 10, 11, 5);
+    g.fillRoundedRect(SHAFT_LEFT - 5, top - 2, SHAFT_RIGHT - SHAFT_LEFT + 10, 11, 5);
     // Nube dentro de la torre
-    const shaftCloud = this.add.image(CAB_X, BUILD_TOP + 34, 'cloud').setScale(0.42).setAlpha(0.9);
-    this.tweens.add({ targets: shaftCloud, y: BUILD_TOP + 42, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const shaftCloud = this.add.image(CAB_X, top + 34, 'cloud').setScale(0.42).setAlpha(0.9);
+    this.tweens.add({ targets: shaftCloud, y: top + 42, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // ── Zona de cola: suelo de baldosas a todo el ancho inferior ──
     g.fillStyle(0xfff3d6, 1);
@@ -451,15 +475,15 @@ export default class GameScene extends Phaser.Scene {
       this.patienceStars.push(s);
     }
 
-    // Corazones de vida (desde el nivel 15) y temporizador.
+    // Corazones de vida (desde el nivel 15) y temporizador, DEBAJO del cartel.
     this.livesIcons = [];
     if (this.level.lives > 0) {
       for (let i = 0; i < this.level.lives; i++) {
-        const h = this.add.image(96 + i * 34, 44, 'heart').setScale(0.62);
+        const h = this.add.image(30 + i * 34, 96, 'heart').setScale(0.62);
         this.livesIcons.push(h);
       }
     }
-    this.timeText = makeText(this, 96, 78, `${this.timeLeft}s`, 16, '#6b4423', false);
+    this.timeText = makeText(this, 210, 96, `${this.timeLeft}s`, 16, '#6b4423', false);
     this.timeBar = this.add.graphics();
     this.refreshTimerBar();
   }
@@ -470,7 +494,7 @@ export default class GameScene extends Phaser.Scene {
     this.timerEvent = this.time.addEvent({
       delay: 1000, loop: true,
       callback: () => {
-        if (this.won || this.paused || this.repairing) return;
+        if (this.won || this.paused || this.repairing || this.reseActive) return;
         this.timeLeft--;
         this.timeText.setText(`${Math.max(0, this.timeLeft)}s`);
         this.timeText.setColor(this.timeLeft <= 10 ? '#ef4444' : '#6b4423');
@@ -489,9 +513,9 @@ export default class GameScene extends Phaser.Scene {
     const frac = Math.max(0, this.timeLeft / total);
     this.timeBar.clear();
     this.timeBar.fillStyle(0x000000, 0.12);
-    this.timeBar.fillRoundedRect(60, 88, 120, 8, 4);
+    this.timeBar.fillRoundedRect(150, 104, 120, 8, 4);
     this.timeBar.fillStyle(this.timeLeft <= 10 ? 0xef4444 : 0x4ade80, 1);
-    this.timeBar.fillRoundedRect(60, 88, 120 * frac, 8, 4);
+    this.timeBar.fillRoundedRect(150, 104, 120 * frac, 8, 4);
   }
 
   private timeOut(): void {
@@ -815,7 +839,7 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Interacción ──────────────────────────────────────────────────────────
   private onPassengerTap(p: Passenger): void {
-    if (this.won || this.paused || this.moving) return;
+    if (this.won || this.paused || this.moving || this.reseActive) return;
     audio.ensure();
 
     if (p.state === 'queue') {
@@ -836,15 +860,20 @@ export default class GameScene extends Phaser.Scene {
         this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
         return;
       }
-      // Enemigos: no pueden viajar juntos.
+      // Enemigos: PUEDEN subir juntos, pero resta 1 estrella (para aprender).
       const myEnemies = this.enemiesOf.get(p.id) ?? [];
       if (myEnemies.some((e) => onboard.some((o) => o.id === e))) {
+        const forgiveNow = !this.forgiven;
+        if (forgiveNow) this.forgiven = true;
+        else this.ruleBreaks++;
         audio.error();
         this.setMood(p, 'angry');
-        this.showBubble(pickLine(ENEMY_LINES), p.container.x, p.container.y - 70, 1800);
+        this.showBubble(pickLine(ENEMY_LINES), p.container.x, p.container.y - 70, 2000);
+        this.showBubble(forgiveNow ? '¡Esos dos se odian! Rese te perdona esta vez' : '¡Esos dos se odian! -1 estrella', CAB_X, this.cab.y - 90, 2000);
         this.tweens.add({ targets: p.image, x: 4, duration: 60, yoyo: true, repeat: 3 });
         this.time.delayedCall(1500, () => this.setMood(p, 'happy'));
-        return;
+        // No se bloquea: el jugador aprende con la consecuencia.
+        if (forgiveNow) this.reseSay('forg_enemy');
       }
       if (this.usedSlots() + p.slots > this.level.capacity) {
         audio.error();
@@ -903,7 +932,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private onFloorButton(f: number): void {
-    if (this.won || this.paused || this.moving) return;
+    if (this.won || this.paused || this.moving || this.reseActive) return;
     audio.ensure();
     if (f === this.elevatorFloor) return;
     const onboard = this.onboard();
@@ -979,13 +1008,16 @@ export default class GameScene extends Phaser.Scene {
       return true;
     });
     if (separated.length > 0) {
-      this.separations++;
+      const forgiveNow = !this.forgiven;
+      if (forgiveNow) this.forgiven = true;
+      else this.separations++;
       audio.wrong();
       separated.forEach((p) => {
         this.setMood(p, 'angry');
         this.showBubble(pickLine(SEPARATED_LINES, p.dest), p.container.x, p.container.y - 70, 2200);
       });
-      this.showBubble('¡Separaste una pareja! -1 estrella', CAB_X, this.cab.y - 90, 2200);
+      this.showBubble(forgiveNow ? '¡Separaste una pareja! Rese te perdona esta vez' : '¡Separaste una pareja! -1 estrella', CAB_X, this.cab.y - 90, 2200);
+      if (forgiveNow) this.reseSay('forg_couple');
     }
 
     if (sleepers.length > 0) {
@@ -1012,12 +1044,15 @@ export default class GameScene extends Phaser.Scene {
    * monstruos vuelven molestos a recepción.
    */
   private wrongFloor(): void {
+    const forgiveNow = !this.forgiven;
+    if (forgiveNow) { this.forgiven = true; this.forgiveMoves = 2; }
     this.mistakes++;
     audio.wrong();
     if (this.save.settings.vibration) vibrate([60, 40, 60]);
     this.cameras.main.shake(220, 0.006);
     this.flashVignette();
     this.showWrongText();
+    if (forgiveNow) this.reseSay('forg_wrong');
 
     const mood = moodForMistakes(this.mistakes);
     this.onboard().forEach((p) => {
@@ -1331,20 +1366,24 @@ export default class GameScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(90);
     const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.4).setOrigin(0).setInteractive();
     c.add(dim);
-    c.add(makePanel(this, W / 2, H / 2, 380, 380));
-    c.add(makeText(this, W / 2, H / 2 - 140, 'PAUSA', 34, '#a06a35'));
-    const resume = makeButton(this, W / 2, H / 2 - 60, 260, 58, 'CONTINUAR', {
+    c.add(makePanel(this, W / 2, H / 2, 380, 450));
+    c.add(makeText(this, W / 2, H / 2 - 170, 'PAUSA', 34, '#a06a35'));
+    const resume = makeButton(this, W / 2, H / 2 - 85, 260, 56, 'CONTINUAR', {
       fontSize: 22, onClick: () => { this.paused = false; c.destroy(); },
     });
-    const restart = makeButton(this, W / 2, H / 2 + 20, 260, 58, 'REINICIAR', {
+    const restart = makeButton(this, W / 2, H / 2 - 12, 260, 56, 'REINICIAR', {
       bg: COLORS.mintDark, fontSize: 22,
       onClick: () => { this.paused = false; this.scene.restart({ levelId: this.level.id }); },
     });
-    const exit = makeButton(this, W / 2, H / 2 + 100, 260, 58, 'SALIR', {
+    const exit = makeButton(this, W / 2, H / 2 + 61, 260, 56, 'SALIR', {
       bg: COLORS.purple, fontSize: 22,
       onClick: () => { this.paused = false; this.scene.start('levels'); },
     });
-    c.add([resume, restart, exit]);
+    const rese = makeButton(this, W / 2, H / 2 + 134, 260, 56, 'RESE TE EXPLICA', {
+      bg: COLORS.accent, fontSize: 20,
+      onClick: () => { this.paused = false; c.destroy(); this.reseSay(this.tutorialKey); },
+    });
+    c.add([resume, restart, exit, rese]);
   }
 
   // ── Avería del ascensor + minijuego de reparación ──────────────────────
@@ -1443,50 +1482,122 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ── Recepcionista Rese: personaje guía ─────────────────────────────────
+  // ── Recepcionista Rese: guía en media pantalla ───────────────────────────
   private createReceptionist(): void {
-    this.receptionistBg = this.add.graphics();
+    // Fondo oscurecido mientras Rese explica.
+    this.reseOverlay = this.add.rectangle(W / 2, H / 2, W, H, 0x1e2a4a, 0.45).setDepth(66).setVisible(false);
+    // Rese: sube desde abajo hasta ocupar media pantalla.
+    this.reseImg = this.add.image(W / 2, H + 280, 'rese').setDepth(68).setVisible(false);
+    this.reseImg.setDisplaySize(400, 400); // media pantalla al subir
+    const reseSkin = getCustomOption('rese', this.save.custom.rese);
+    if (reseSkin.id !== 'azul') this.reseImg.setTint(reseSkin.color);
+    this.receptionistBg = this.add.graphics().setDepth(70);
     this.receptionistText = this.add.text(0, 0, '', {
-      fontFamily: 'Arial, sans-serif', fontSize: '15px', color: '#6b4423',
-      align: 'center', wordWrap: { width: 200 },
-    }).setOrigin(0.5);
+      fontFamily: 'Arial, sans-serif', fontSize: '17px', color: '#1e3a8a',
+      align: 'center', wordWrap: { width: 380 },
+    }).setOrigin(0.5).setDepth(70);
     this.receptionist = this.add.container(0, 0, [this.receptionistBg, this.receptionistText]).setDepth(70).setVisible(false);
-    // Rese aparece en la recepción (junto al mostrador).
-    const reseColor = getCustomOption('rese', this.save.custom.rese).color;
-    const img = this.add.image(BUILD_LEFT + 200, LOBBY_TOP + 30, 'rese').setScale(0.55).setDepth(9).setTint(reseColor);
-    this.tweens.add({ targets: img, y: LOBBY_TOP + 24, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    // Saludo inicial en el nivel 1.
-    if (this.level.id === 1) {
-      this.time.delayedCall(800, () => {
-        this.sayAsReceptionist(pickLine(RECEPTIONIST_LINES.welcome), 3000);
-      });
+    this.reseHint = makeText(this, W / 2, H - 448, 'toca SALTAR si ya lo sabes', 13, '#ffffff').setOrigin(0.5).setDepth(71).setVisible(false);
+    this.reseSkipBtn = makeButton(this, W - 88, 46, 152, 44, 'SALTAR ▶', {
+      bg: COLORS.purple, fontSize: 16, onClick: () => this.hideRese(),
+    }).setDepth(72).setVisible(false);
+    // Explicación inicial: nivel 1 o mecánica nueva.
+    this.time.delayedCall(800, () => this.showTutorialIfNeeded());
+  }
+
+  /** Explica paso a paso solo en nivel 1 o cuando aparece una mecánica nueva. */
+  private showTutorialIfNeeded(): void {
+    if (this.tutorialDone || this.won) return;
+    const lvl = this.level.id;
+    const first = (cond: (l: LevelDef) => boolean): number => LEVELS.find(cond)?.id ?? -1;
+    let key: string | null = null;
+    if (lvl === 1) key = 'tut1';
+    else if (lvl === first((l) => l.couples.length > 0)) key = 'tut_couple';
+    else if (lvl === first((l) => l.lives > 0)) key = 'tut_lives';
+    else if (lvl === first((l) => l.enemies.length > 0)) key = 'tut_enemies';
+    else if (lvl === first((l) => l.passengers.some((p) => MONSTER_MAP[p.m].rule === 'luggage'))) key = 'tut_luggage';
+    else if (lvl === first((l) => l.breakdownChance > 0)) key = 'tut_break';
+    if (key) {
+      this.tutorialDone = true;
+      this.tutorialKey = key;
+      this.reseSay(key);
     }
   }
 
-  private sayAsReceptionist(text: string, duration = 2600): void {
-    const w = Math.min(260, this.receptionistText.width + 40);
-    const h = Math.max(48, this.receptionistText.height + 30);
-    this.receptionistText.setText(text);
+  /** Rese sube desde abajo (media pantalla), habla con su voz y avanza línea a línea. */
+  private reseSay(key: string): void {
+    if (this.reseActive || this.won) return;
+    const clip = RESE_VOICE[key];
+    if (!clip) return;
+    this.reseClipKey = key;
+    this.reseActive = true;
+    this.reseOverlay.setAlpha(0.45).setVisible(true);
+    this.reseImg.setVisible(true);
+    this.reseSkipBtn.setVisible(true);
+    this.tweens.killTweensOf(this.reseImg);
+    this.tweens.add({
+      targets: this.reseImg, y: H - 235, duration: 650, ease: 'Back.easeOut',
+      onComplete: () => {
+        this.tweens.add({ targets: this.reseImg, y: H - 225, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      },
+    });
+    // Voz de Rese (respeta el ajuste de sonido del juego).
+    this.sound.mute = !this.save.settings.sound;
+    this.sound.stopAll();
+    this.sound.play(key);
+    // Avance de líneas sincronizado con el audio.
+    this.reseEvents.forEach((e) => e.remove());
+    this.reseEvents = [];
+    clip.t.forEach((t, i) => {
+      this.reseEvents.push(this.time.delayedCall(Math.max(0, t * 1000 - 150), () => this.showReseLine(i)));
+    });
+    this.reseEvents.push(this.time.delayedCall(clip.dur * 1000 + 600, () => this.hideRese()));
+  }
+
+  private showReseLine(i: number): void {
+    if (!this.reseActive) return;
+    const clip = RESE_VOICE[this.reseClipKey];
+    this.receptionistText.setText(clip.lines[i]);
+    const w = Math.min(470, this.receptionistText.width + 44);
+    const h = Math.max(56, this.receptionistText.height + 28);
     this.receptionistBg.clear();
     this.receptionistBg.fillStyle(0xffffff, 0.97);
-    this.receptionistBg.fillRoundedRect(-w / 2, -h / 2, w, h, 12);
-    this.receptionistBg.lineStyle(3, 0x241640, 1);
-    this.receptionistBg.strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
-    this.receptionist.setPosition(BUILD_LEFT + 200, LOBBY_TOP - 30).setVisible(true).setAlpha(1);
-    this.time.delayedCall(duration, () => {
-      this.tweens.add({ targets: this.receptionist, alpha: 0, duration: 300, onComplete: () => this.receptionist.setVisible(false) });
-    });
+    this.receptionistBg.fillRoundedRect(-w / 2, -h / 2, w, h, 16);
+    this.receptionistBg.lineStyle(4, 0x1e3a8a, 1);
+    this.receptionistBg.strokeRoundedRect(-w / 2, -h / 2, w, h, 16);
+    this.receptionistBg.fillStyle(0xffffff, 0.97);
+    this.receptionistBg.fillTriangle(-14, h / 2 - 3, 14, h / 2 - 3, 0, h / 2 + 16);
+    this.receptionist.setPosition(W / 2, 400).setVisible(true);
+    this.reseHint.setVisible(true);
+  }
+
+  private hideRese(): void {
+    if (!this.reseActive) return;
+    this.reseActive = false;
+    this.reseEvents.forEach((e) => e.remove());
+    this.reseEvents = [];
+    this.sound.stopAll();
+    this.receptionist.setVisible(false);
+    this.reseHint.setVisible(false);
+    this.reseSkipBtn.setVisible(false);
+    this.tweens.killTweensOf(this.reseImg);
+    this.tweens.add({ targets: this.reseImg, y: H + 280, duration: 500, ease: 'Back.easeIn', onComplete: () => this.reseImg.setVisible(false) });
+    this.tweens.add({ targets: this.reseOverlay, alpha: 0, duration: 400, onComplete: () => this.reseOverlay.setVisible(false) });
   }
 
   private win(): void {
     if (this.won) return;
     this.won = true;
     audio.victory();
-    let stars = starsFor(this.distance, this.optimal);
-    // Cada pareja separada resta una estrella (mínimo 1).
-    stars = Math.max(1, stars - this.separations);
-    const perfect = isPerfect(this.distance, this.optimal) && this.separations === 0;
+    const effDistance = Math.max(this.optimal, this.distance - this.forgiveMoves);
+    let stars = starsFor(effDistance, this.optimal);
+    // Cada regla rota (pareja separada, enemigos juntos) resta 1 estrella.
+    const penalties = this.separations + this.ruleBreaks;
+    stars = Math.max(1, stars - penalties);
+    const perfect = isPerfect(effDistance, this.optimal) && penalties === 0;
+    const record = isRecord(effDistance, this.optimal) && penalties === 0;
     const prevStars = this.save.stars[this.level.id] ?? 0;
-    const earned = stars > prevStars ? coinsFor(stars, perfect) : 2;
+    const earned = stars > prevStars ? coinsFor(stars, perfect, record) : 2;
 
     this.save.stars[this.level.id] = Math.max(prevStars, stars);
     this.save.coins += earned;
@@ -1531,11 +1642,13 @@ export default class GameScene extends Phaser.Scene {
     });
 
     c.add(makeText(this, W / 2, H / 2 - 80, `Recorrido: ${this.distance} · Óptimo: ${this.optimal}`, 18, '#6b4423', false));
-    if (perfect) {
-      c.add(makeText(this, W / 2, H / 2 - 56, '¡Solución perfecta! Bonus de monedas', 15, '#2f9e44', false));
+    if (record) {
+      c.add(makeText(this, W / 2, H / 2 - 56, '¡RÉCORD! ¡Eres un genio! +150 monedas', 15, '#2f9e44', false));
+    } else if (perfect) {
+      c.add(makeText(this, W / 2, H / 2 - 56, '¡Solución perfecta! +50 monedas', 15, '#2f9e44', false));
     }
-    if (this.separations > 0) {
-      c.add(makeText(this, W / 2, H / 2 - 56, `Parejas separadas: ${this.separations} (-${this.separations} estrella)`, 15, '#ef4444', false));
+    if (penalties > 0) {
+      c.add(makeText(this, W / 2, H / 2 - 56, `Reglas rotas: ${penalties} (-${penalties} estrella)`, 15, '#ef4444', false));
     }
     const coinRow = this.add.container(W / 2, H / 2 - 38);
     coinRow.add(this.add.image(0, 0, 'coin').setScale(0.7));
