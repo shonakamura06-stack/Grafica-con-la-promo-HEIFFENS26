@@ -211,37 +211,118 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Hotel kawaii (2.5D) ──────────────────────────────────────────────────
   private drawHotel(): void {
+    const wallpaper = getCustomOption('wallpaper', this.save.custom.wallpaper).color;
     const carpet = getCustomOption('carpet', this.save.custom.carpet).color;
     const N = this.level.floors;
     const fh = this.fh();
+    const V = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
 
     const g = this.add.graphics();
     // Sombra del edificio
     g.fillStyle(0x000000, 0.1);
     g.fillRoundedRect(BUILD_LEFT + 7, BUILD_TOP + 9, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 16);
-    // Fachada crema
-    g.fillStyle(0xfff0d0, 1);
-    g.fillRoundedRect(BUILD_LEFT, BUILD_TOP, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 16);
-    // Pared lateral derecha (efecto 3D) y zócalo
-    g.fillStyle(0xe8cfa0, 1);
-    g.fillRect(BUILD_RIGHT - 13, BUILD_TOP + 8, 13, BUILD_BOTTOM - BUILD_TOP - 8);
-    g.fillStyle(0xf5d9a8, 1);
-    g.fillRect(BUILD_LEFT, BUILD_BOTTOM - 14, BUILD_RIGHT - BUILD_LEFT, 14);
-    // Techo con franja rosa
+    // Techo en 3D: cara superior en perspectiva + franja frontal rosa
+    g.fillStyle(0xfbcfe8, 1);
+    g.fillPoints([V(BUILD_LEFT, BUILD_TOP), V(BUILD_RIGHT, BUILD_TOP), V(BUILD_RIGHT + 12, BUILD_TOP - 14), V(BUILD_LEFT + 12, BUILD_TOP - 14)], true);
     g.fillStyle(0xf9a8d4, 1);
     g.fillRoundedRect(BUILD_LEFT - 2, BUILD_TOP - 10, BUILD_RIGHT - BUILD_LEFT + 4, 16, 8);
     g.fillStyle(0xffffff, 0.5);
     g.fillRect(BUILD_LEFT + 4, BUILD_TOP - 8, BUILD_RIGHT - BUILD_LEFT - 8, 4);
+    // Fachada crema
+    g.fillStyle(wallpaper, 1);
+    g.fillRoundedRect(BUILD_LEFT, BUILD_TOP, BUILD_RIGHT - BUILD_LEFT, BUILD_BOTTOM - BUILD_TOP, 16);
+    // Pared lateral derecha (profundidad)
+    g.fillStyle(0x000000, 0.1);
+    g.fillPoints([V(BUILD_RIGHT - 18, BUILD_TOP + 10), V(BUILD_RIGHT, BUILD_TOP + 10), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 18, BUILD_BOTTOM)], true);
+    // Zócalo inferior
+    g.fillStyle(0xf5d9a8, 1);
+    g.fillRect(BUILD_LEFT, BUILD_BOTTOM - 14, BUILD_RIGHT - BUILD_LEFT, 14);
 
-    // Torre de cristal del ascensor
-    g.fillStyle(0xbfe8ff, 0.45);
+    // ── Lobby en 3D: techo, paredes, ventanales y suelo en perspectiva ──
+    const ceilY = LOBBY_TOP;
+    const backY = LOBBY_TOP + 24;
+    const backBotY = BUILD_BOTTOM - 24;
+    // Techo en perspectiva con luces empotradas
+    g.fillStyle(0xf5e6c8, 1);
+    g.fillPoints([V(BUILD_LEFT, ceilY), V(BUILD_RIGHT, ceilY), V(BUILD_RIGHT - 24, backY), V(BUILD_LEFT + 24, backY)], true);
+    for (const lx of [90, 170, 250, 330]) {
+      g.fillStyle(0xfff3d6, 0.5);
+      g.fillEllipse(lx, ceilY + 9, 26, 10);
+      g.fillStyle(0xffffff, 1);
+      g.fillEllipse(lx, ceilY + 8, 16, 6);
+    }
+    // Pared izquierda en perspectiva con ventanas
+    g.fillStyle(0xd9a066, 1);
+    g.fillPoints([V(BUILD_LEFT, ceilY), V(BUILD_LEFT + 24, backY), V(BUILD_LEFT + 24, backBotY), V(BUILD_LEFT, BUILD_BOTTOM)], true);
+    g.fillStyle(0xffffff, 1);
+    g.fillRoundedRect(BUILD_LEFT + 3, ceilY + 34, 16, 26, 3);
+    g.fillRoundedRect(BUILD_LEFT + 3, ceilY + 66, 16, 26, 3);
+    g.fillStyle(0xbfe8ff, 1);
+    g.fillRect(BUILD_LEFT + 5, ceilY + 36, 12, 22);
+    g.fillRect(BUILD_LEFT + 5, ceilY + 68, 12, 22);
+    // Pared derecha en perspectiva
+    g.fillStyle(0xc98f5a, 1);
+    g.fillPoints([V(BUILD_RIGHT, ceilY), V(BUILD_RIGHT - 24, backY), V(BUILD_RIGHT - 24, backBotY), V(BUILD_RIGHT, BUILD_BOTTOM)], true);
+    g.fillStyle(0xffffff, 1);
+    g.fillRoundedRect(BUILD_RIGHT - 19, ceilY + 40, 14, 24, 3);
+    g.fillStyle(0xbfe8ff, 1);
+    g.fillRect(BUILD_RIGHT - 17, ceilY + 42, 10, 20);
+    // Ventanales posteriores con vista al exterior
+    g.fillStyle(0xbfe8ff, 0.9);
+    g.fillRect(BUILD_LEFT + 24, backY, BUILD_RIGHT - BUILD_LEFT - 48, backBotY - backY);
+    g.fillStyle(0x9fe8b0, 1);
+    g.fillRect(BUILD_LEFT + 24, backBotY - 20, BUILD_RIGHT - BUILD_LEFT - 48, 20);
+    const trees: Array<[number, number]> = [[80, backBotY - 26], [170, backBotY - 22], [290, backBotY - 24]];
+    for (const [tx, ty] of trees) {
+      g.fillStyle(0x7c4f24, 1);
+      g.fillRect(tx - 3, ty, 6, 14);
+      g.fillStyle(0x4ade80, 1);
+      g.fillCircle(tx, ty - 8, 11);
+      g.fillCircle(tx - 8, ty - 2, 7);
+      g.fillCircle(tx + 8, ty - 2, 7);
+    }
+    const houses: Array<[number, number, number]> = [[120, backBotY - 24, 0xfbcfe8], [230, backBotY - 20, 0xbfdbfe], [310, backBotY - 24, 0xfde68a]];
+    for (const [hx, hy, hc] of houses) {
+      g.fillStyle(hc, 1);
+      g.fillRoundedRect(hx, hy, 30, 22, 4);
+      g.fillTriangle(hx - 3, hy, hx + 33, hy, hx + 15, hy - 12);
+    }
+    g.lineStyle(4, 0xffffff, 0.95);
+    g.strokeRect(BUILD_LEFT + 24, backY, BUILD_RIGHT - BUILD_LEFT - 48, backBotY - backY);
+    g.lineStyle(3, 0xffffff, 0.8);
+    for (let i = 1; i < 4; i++) {
+      const vx = BUILD_LEFT + 24 + ((BUILD_RIGHT - BUILD_LEFT - 48) / 4) * i;
+      g.lineBetween(vx, backY, vx, backBotY);
+    }
+    g.lineBetween(BUILD_LEFT + 24, backY + (backBotY - backY) / 2, BUILD_RIGHT - 24, backY + (backBotY - backY) / 2);
+    // Suelo del lobby en perspectiva con baldosas que convergen
+    g.fillStyle(carpet, 1);
+    g.fillPoints([V(BUILD_LEFT, BUILD_BOTTOM), V(BUILD_RIGHT, BUILD_BOTTOM), V(BUILD_RIGHT - 24, backBotY), V(BUILD_LEFT + 24, backBotY)], true);
+    g.lineStyle(2, 0xa06a35, 0.3);
+    for (let i = 0; i <= 6; i++) {
+      const bx = BUILD_LEFT + 24 + ((BUILD_RIGHT - BUILD_LEFT - 48) / 6) * i;
+      const fx = BUILD_LEFT + ((BUILD_RIGHT - BUILD_LEFT) / 6) * i;
+      g.lineBetween(bx, backBotY, fx, BUILD_BOTTOM);
+    }
+    g.lineBetween(BUILD_LEFT + 18, backBotY + 8, BUILD_RIGHT - 18, backBotY + 8);
+    g.lineBetween(BUILD_LEFT + 10, backBotY + 16, BUILD_RIGHT - 10, backBotY + 16);
+    // Banco del lobby con volumen
+    this.drawBench3D(g, BUILD_LEFT + 14, backBotY - 22, 88);
+
+    // ── Torre de cristal del ascensor (con profundidad) ──
+    g.fillGradientStyle(0xeaf7ff, 0xeaf7ff, 0xbfe8ff, 0xbfe8ff, 0.55, 0.55, 0.35, 0.35);
     g.fillRect(SHAFT_LEFT, BUILD_TOP + 6, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 6);
-    g.lineStyle(3, 0xffffff, 0.75);
+    g.fillStyle(0xffffff, 0.25);
+    g.fillRect(SHAFT_LEFT + 10, BUILD_TOP + 6, 14, BUILD_BOTTOM - BUILD_TOP - 6);
+    g.lineStyle(4, 0x5a7a8a, 0.8);
     for (let f = 1; f <= N; f++) {
       g.lineBetween(SHAFT_LEFT, this.bandBottom(f), SHAFT_RIGHT, this.bandBottom(f));
     }
+    g.lineStyle(3, 0x5a7a8a, 0.5);
+    g.lineBetween(CAB_X - 62, BUILD_TOP + 6, CAB_X - 62, BUILD_BOTTOM);
+    g.lineBetween(CAB_X + 62, BUILD_TOP + 6, CAB_X + 62, BUILD_BOTTOM);
     g.lineBetween(CAB_X, BUILD_TOP + 6, CAB_X, BUILD_BOTTOM);
-    g.lineStyle(4, 0x8a7a5a, 1);
+    g.lineStyle(4, 0x5a7a8a, 1);
     g.strokeRect(SHAFT_LEFT, BUILD_TOP + 6, SHAFT_RIGHT - SHAFT_LEFT, BUILD_BOTTOM - BUILD_TOP - 6);
     g.fillStyle(0x8a7a5a, 1);
     g.fillRoundedRect(SHAFT_LEFT - 6, BUILD_TOP - 2, SHAFT_RIGHT - SHAFT_LEFT + 12, 12, 5);
@@ -257,6 +338,8 @@ export default class GameScene extends Phaser.Scene {
       g.fillRect(BUILD_LEFT + 8, top, BUILD_RIGHT - BUILD_LEFT - 16, fh);
       g.fillStyle(0xf5d9a8, 1);
       g.fillRect(BUILD_LEFT + 8, top, BUILD_RIGHT - BUILD_LEFT - 16, 5);
+      g.fillStyle(0x000000, 0.05);
+      g.fillRect(BUILD_LEFT + 8, top + 5, BUILD_RIGHT - BUILD_LEFT - 16, 7);
 
       this.drawWindow(g, BUILD_LEFT + 30, top + fh * 0.22, f % 2 === 1);
       this.drawWindow(g, BUILD_RIGHT - 74, top + fh * 0.22, f % 2 === 1);
@@ -277,49 +360,10 @@ export default class GameScene extends Phaser.Scene {
     const peek = this.add.image(BUILD_LEFT + 72, this.bandBottom(midFloor) - fh * 0.68 - 4, 'cloud').setScale(0.42);
     this.tweens.add({ targets: peek, y: peek.y - 5, duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    // ── Lobby: ventanales con vista al exterior ──
-    const glassY = LOBBY_TOP + 8;
-    const glassH = BUILD_BOTTOM - LOBBY_TOP - 16;
-    g.fillStyle(0xbfe8ff, 0.85);
-    g.fillRoundedRect(BUILD_LEFT + 8, glassY, BUILD_RIGHT - BUILD_LEFT - 16, glassH, 8);
-    // Vista exterior: suelo verde, árboles y casitas
-    g.fillStyle(0x9fe8b0, 1);
-    g.fillRect(BUILD_LEFT + 8, glassY + glassH - 26, BUILD_RIGHT - BUILD_LEFT - 16, 26);
-    const trees: Array<[number, number]> = [[70, glassY + glassH - 40], [150, glassY + glassH - 34], [300, glassY + glassH - 38]];
-    for (const [tx, ty] of trees) {
-      g.fillStyle(0x7c4f24, 1);
-      g.fillRect(tx - 3, ty, 6, 16);
-      g.fillStyle(0x4ade80, 1);
-      g.fillCircle(tx, ty - 8, 12);
-      g.fillCircle(tx - 9, ty - 2, 8);
-      g.fillCircle(tx + 9, ty - 2, 8);
-    }
-    const houses: Array<[number, number, number]> = [[110, glassY + glassH - 30, 0xfbcfe8], [240, glassY + glassH - 26, 0xbfdbfe], [330, glassY + glassH - 30, 0xfde68a]];
-    for (const [hx, hy, hc] of houses) {
-      g.fillStyle(hc, 1);
-      g.fillRoundedRect(hx, hy, 34, 26, 4);
-      g.fillTriangle(hx - 3, hy, hx + 37, hy, hx + 17, hy - 14);
-    }
-    // Marcos de los ventanales
-    g.lineStyle(4, 0xffffff, 0.95);
-    g.strokeRoundedRect(BUILD_LEFT + 8, glassY, BUILD_RIGHT - BUILD_LEFT - 16, glassH, 8);
-    g.lineStyle(3, 0xffffff, 0.8);
-    for (let i = 1; i < 4; i++) {
-      const vx = BUILD_LEFT + 8 + ((BUILD_RIGHT - BUILD_LEFT - 16) / 4) * i;
-      g.lineBetween(vx, glassY, vx, glassY + glassH);
-    }
-    g.lineBetween(BUILD_LEFT + 8, glassY + glassH / 2, BUILD_RIGHT - 8, glassY + glassH / 2);
-    // Suelo de baldosas del lobby
-    g.fillStyle(carpet, 1);
-    g.fillRect(BUILD_LEFT + 8, BUILD_BOTTOM - 14, BUILD_RIGHT - BUILD_LEFT - 16, 14);
-    // Bancos del lobby a ambos lados de la torre
-    this.drawBench(g, BUILD_LEFT + 12, BUILD_BOTTOM - 44, 88);
-    this.drawBench(g, BUILD_RIGHT - 82, BUILD_BOTTOM - 44, 70);
-
     // ── Recepción (fuera del edificio, a la derecha) ──
     const deskX = 404, deskY = 692;
-    g.fillStyle(0x000000, 0.1);
-    g.fillRoundedRect(deskX + 3, deskY + 8, 112, 64, 8);
+    g.fillStyle(0x000000, 0.12);
+    g.fillEllipse(deskX + 56, deskY + 68, 120, 14);
     g.fillStyle(0x7c4f24, 1);
     g.fillRoundedRect(deskX, deskY + 8, 112, 56, 8);
     g.fillStyle(0xa06a35, 1);
@@ -343,24 +387,41 @@ export default class GameScene extends Phaser.Scene {
     const receptionist = this.add.image(deskX + 56, deskY - 26, 'monster-moco').setScale(0.5);
     this.tweens.add({ targets: receptionist, y: deskY - 32, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    // ── Zona de cola: suelo de baldosas con bancos y flores ──
+    // ── Zona de cola: suelo de baldosas en perspectiva ──
     g.fillStyle(0xfff3d6, 1);
     g.fillRoundedRect(8, 786, W - 16, 164, 16);
-    g.lineStyle(2, 0xe8cfa0, 1);
-    for (let tx = 62; tx < W - 8; tx += 54) {
-      g.lineBetween(tx, 786, tx, 950);
+    g.lineStyle(2, 0xe8cfa0, 0.8);
+    for (let i = -3; i <= 3; i++) {
+      g.lineBetween(W / 2 + i * 95, 946, W / 2 + i * 58, 790);
     }
-    for (let ty = 822; ty < 950; ty += 36) {
-      g.lineBetween(8, ty, W - 8, ty);
+    for (const ty of [812, 848, 890, 934]) {
+      g.lineBetween(12, ty, W - 12, ty);
     }
-    this.drawBench(g, 18, 896, 100);
-    this.drawBench(g, W - 118, 896, 100);
+    this.drawBench3D(g, 18, 896, 100);
+    this.drawBench3D(g, W - 118, 896, 100);
     const flowerColors = [0xf472b6, 0xffc93c, 0xffffff, 0xf87171, 0xc084fc];
     for (let i = 0; i < 8; i++) {
       const fx = 140 + i * 36;
       const fy = 936 + (i % 2) * 8;
       this.drawFlower(g, fx, fy, flowerColors[i % flowerColors.length]);
     }
+  }
+
+  /** Banco de madera con volumen (respaldo, asiento, patas y sombra). */
+  private drawBench3D(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number): void {
+    g.fillStyle(0x000000, 0.12);
+    g.fillEllipse(x + w / 2, y + 36, w, 10);
+    g.fillStyle(0x7c4f24, 1);
+    g.fillRect(x + 6, y + 22, 7, 14);
+    g.fillRect(x + w - 13, y + 22, 7, 14);
+    g.fillStyle(0xc98f4e, 1);
+    g.fillRoundedRect(x, y + 16, w, 8, 3);
+    g.fillStyle(0xa06a35, 1);
+    g.fillRoundedRect(x, y + 20, w, 8, 3);
+    g.fillStyle(0xa06a35, 1);
+    g.fillRoundedRect(x, y, w, 18, 4);
+    g.fillStyle(0xc98f4e, 1);
+    g.fillRoundedRect(x + 3, y + 2, w - 6, 6, 3);
   }
 
   private drawWindow(g: Phaser.GameObjects.Graphics, x: number, y: number, lit: boolean): void {
@@ -420,15 +481,6 @@ export default class GameScene extends Phaser.Scene {
       new Phaser.Math.Vector2(x, y + h),
     ], true);
     makeText(this, x + w / 2, y + h / 2 - 3, `${f}`, 17, '#ffffff').setShadow(0, 2, 'rgba(0,0,0,0.3)', 2, true, true);
-  }
-
-  private drawBench(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number): void {
-    g.fillStyle(0xa06a35, 1);
-    g.fillRoundedRect(x, y, w, 10, 4);
-    g.fillRoundedRect(x, y + 16, w, 10, 4);
-    g.fillStyle(0x7c4f24, 1);
-    g.fillRect(x + 8, y + 26, 8, 18);
-    g.fillRect(x + w - 16, y + 26, 8, 18);
   }
 
   private drawFlower(g: Phaser.GameObjects.Graphics, x: number, y: number, color: number): void {
