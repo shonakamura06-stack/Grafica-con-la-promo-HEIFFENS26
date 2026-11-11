@@ -5,9 +5,14 @@ habitado por monstruos adorables y lleva a cada huésped a su piso.
 
 - **Formato:** vertical 9:16, pensado para teléfonos Android (también funciona en navegador).
 - **Tecnología:** TypeScript + Phaser 3/4 + Vite + PWA instalable.
-- **Contenido:** 30 niveles, 12 monstruos originales, 5 reglas especiales,
-  sistema de estrellas y monedas, álbum coleccionable, personalización del
-  hotel y guardado local. Sin anuncios, sin compras reales, sin cuentas.
+- **Contenido:** 30 niveles, 20 monstruos originales, 8 reglas especiales,
+  sistema de estrellas y monedas, álbum coleccionable, tienda de cosméticos,
+  misiones, Modo Desafío opcional y guardado local.
+- **Modelo (Economía V3):** la campaña completa es **gratis y sin energía**:
+  reintentos ilimitados, sin anuncios y sin esperas. Las monedas se ganan por
+  logros únicos y solo compran cosméticos. Existe contenido opcional de
+  **pago único** (packs cosméticos) en una sección para adultos con barrera
+  parental. Sin cajas aleatorias, sin ofertas con cuenta atrás, sin suscripción.
 
 ## Cómo jugar
 
@@ -15,7 +20,8 @@ habitado por monstruos adorables y lleva a cada huésped a su piso.
    Cada monstruo muestra el número de su piso en un globo.
 2. Toca el piso en el panel del ascensor. El ascensor viaja hasta allí y
    los pasajeros de ese piso salen solos.
-3. Cuando el ascensor queda vacío, vuelve automáticamente a recepción.
+3. Bajar a recepción también es una jugada: toca **PISO 0** cuando quieras
+   (ese viaje cuenta en tu distancia, así que planifica).
 4. Entrega a todos los monstruos para completar el nivel.
 
 La distancia recorrida decide las estrellas (1 a 3), comparada contra el
@@ -83,6 +89,20 @@ docs/        Documentación del proyecto
 
 ## Seguridad y privacidad
 
-Juego pensado para menores: sin chat, sin recopilación de datos, sin
-anuncios, sin microtransacciones ni sistemas de recompensa aleatorios.
-Todo el progreso se guarda localmente en el dispositivo.
+Juego pensado para menores:
+
+- Sin chat, sin cuentas y sin recopilación de datos personales.
+- Sin anuncios en la campaña: nunca hace falta ver publicidad para jugar,
+  continuar o recuperarse de un error.
+- Sin cajas aleatorias ni ofertas con cuenta atrás; las monedas del juego no
+  se compran con dinero real y no tienen valor fuera del juego.
+- Las compras opcionales (cosméticos de pago único) viven en una sección
+  separada y protegida con **barrera parental**, que muestra el contenido
+  exacto antes que el precio. En esta versión web no se cobra nada: hay una
+  demo para que un adulto evalúe el contenido.
+- Todo el progreso y las métricas de balance se guardan **localmente** en el
+  dispositivo (`localStorage`), como contadores agregados anónimos, y no se
+  envían a ningún servidor.
+
+Detalles del diseño económico, precios y la simulación de balance:
+[`docs/ECONOMIA.md`](docs/ECONOMIA.md).

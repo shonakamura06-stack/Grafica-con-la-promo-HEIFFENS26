@@ -127,6 +127,7 @@ export default class GameScene extends Phaser.Scene {
   private receptionistText!: Phaser.GameObjects.Text;
   private receptionistBg!: Phaser.GameObjects.Graphics;
   private reseImg!: Phaser.GameObjects.Image;
+  private reseRig!: Phaser.GameObjects.Container;
   private tutorialDone = false;    // ya se explicó este nivel
   private forgiven = false;        // Rese ya perdonó un error en este nivel
   private reseActive = false;
@@ -1654,10 +1655,14 @@ export default class GameScene extends Phaser.Scene {
   private createReceptionist(): void {
     this.reseOverlay = this.add.rectangle(W / 2, H / 2, W, H, 0x1e2a4a, 0.45).setDepth(66).setVisible(false).setInteractive();
     this.reseOverlay.on('pointerdown', () => this.reseAdvance());
-    this.reseImg = this.add.image(W / 2, H + 280, 'rese').setDepth(68).setVisible(false);
+    // Rese y su traje/accesorio viven en un contenedor: así el cosmético la sigue al subir.
+    this.reseImg = this.add.image(0, 0, 'rese');
     this.reseImg.setDisplaySize(400, 400);
     this.reseCostume?.destroy();
     this.reseCostume = decorateRese(this, this.reseImg, this.save) ?? undefined;
+    this.reseRig = this.add.container(W / 2, H + 280,
+      this.reseCostume ? [this.reseImg, this.reseCostume] : [this.reseImg])
+      .setDepth(68).setVisible(false);
     // Caja de diálogo estilo novela visual, abajo.
     this.receptionistBg = this.add.graphics().setDepth(70);
     this.receptionistText = this.add.text(W / 2, 836, '', {
@@ -1864,13 +1869,13 @@ export default class GameScene extends Phaser.Scene {
     this.reseOverlay.setAlpha(0.45).setVisible(true);
     this.receptionist.setVisible(true);
     this.drawDialogBox();
-    this.reseImg.setVisible(true);
+    this.reseRig.setVisible(true);
     this.reseSkipBtn.setVisible(true);
-    this.tweens.killTweensOf(this.reseImg);
+    this.tweens.killTweensOf(this.reseRig);
     this.tweens.add({
-      targets: this.reseImg, y: 560, duration: 650, ease: 'Back.easeOut',
+      targets: this.reseRig, y: 560, duration: 650, ease: 'Back.easeOut',
       onComplete: () => {
-        this.tweens.add({ targets: this.reseImg, y: 572, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: this.reseRig, y: 572, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       },
     });
     this.reseAdvance();
@@ -1929,8 +1934,8 @@ export default class GameScene extends Phaser.Scene {
     this.reseHint.setAlpha(1).setVisible(false);
     this.receptionist.setVisible(false);
     this.reseSkipBtn.setVisible(false);
-    this.tweens.killTweensOf(this.reseImg);
-    this.tweens.add({ targets: this.reseImg, y: H + 280, duration: 500, ease: 'Back.easeIn', onComplete: () => this.reseImg.setVisible(false) });
+    this.tweens.killTweensOf(this.reseRig);
+    this.tweens.add({ targets: this.reseRig, y: H + 280, duration: 500, ease: 'Back.easeIn', onComplete: () => this.reseRig.setVisible(false) });
     this.tweens.add({ targets: this.reseOverlay, alpha: 0, duration: 400, onComplete: () => this.reseOverlay.setVisible(false) });
     this.time.delayedCall(400, () => this.startGuidedIfNeeded());
   }
