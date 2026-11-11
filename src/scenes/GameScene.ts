@@ -258,8 +258,8 @@ export default class GameScene extends Phaser.Scene {
       g.fillStyle(0xf5d9a8, 1);
       g.fillRect(BUILD_LEFT + 8, top, BUILD_RIGHT - BUILD_LEFT - 16, 5);
 
-      this.drawWindow(g, BUILD_LEFT + 30, top + fh * 0.22, (f * 3) % 4 === 0);
-      this.drawWindow(g, BUILD_RIGHT - 74, top + fh * 0.22, (f * 3 + 1) % 4 === 0);
+      this.drawWindow(g, BUILD_LEFT + 30, top + fh * 0.22, f % 2 === 1);
+      this.drawWindow(g, BUILD_RIGHT - 74, top + fh * 0.22, f % 2 === 1);
       this.drawRailing(g, BUILD_LEFT + 24, top + fh * 0.68, 96, color);
       this.drawRailing(g, BUILD_RIGHT - 94, top + fh * 0.68, 70, color);
 
@@ -494,7 +494,7 @@ export default class GameScene extends Phaser.Scene {
     g.lineStyle(5, 0xa06a35, 1);
     g.strokeRoundedRect(392, 104, 128, 470, 16);
     makeText(this, 456, 122, 'ASCENSOR', 15, '#a06a35');
-    this.panelFloorText = makeText(this, 456, 142, 'Piso: R', 14, '#e07b2a', false);
+    this.panelFloorText = makeText(this, 456, 142, 'Piso: 0', 14, '#e07b2a', false);
 
     const floors: number[] = [];
     for (let f = N; f >= 1; f--) floors.push(f);
@@ -506,7 +506,7 @@ export default class GameScene extends Phaser.Scene {
       const bg = this.add.graphics();
       const badgeBg = this.add.graphics();
       const badge = makeText(this, x + w / 2 - 12, y - h / 2 + 10, '', 13, '#6b4423');
-      const label = makeText(this, x, y, f === 0 ? 'R' : `${f}`, 24, '#ffffff');
+      const label = makeText(this, x, y, f === 0 ? 'Piso 0' : `${f}`, f === 0 ? 18 : 24, '#ffffff');
       this.floorButtons.set(f, { g: bg, badge, badgeBg, label });
       const zone = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
       zone.on('pointerdown', () => {
@@ -565,9 +565,9 @@ export default class GameScene extends Phaser.Scene {
     base.fillTriangle(-CAB_W / 2 + 14, CAB_H / 2, CAB_W / 2 - 14, CAB_H / 2, 0, CAB_H / 2 + 16);
     this.cab.add(base);
 
-    // Tapa superior naranja + gancho del cable
+    // Tapa superior gris + gancho del cable
     const cap = this.add.graphics();
-    cap.fillStyle(0xffa94d, 1);
+    cap.fillStyle(0x8a7a5a, 1);
     cap.fillEllipse(0, -CAB_H / 2, 52, 18);
     cap.lineStyle(3, 0xffffff, 0.9);
     cap.strokeEllipse(0, -CAB_H / 2, 52, 18);
@@ -582,7 +582,7 @@ export default class GameScene extends Phaser.Scene {
     this.indicatorBg.lineStyle(3, 0xa06a35, 1);
     this.indicatorBg.strokeRoundedRect(-24, -CAB_H / 2 - 30, 48, 24, 8);
     this.cab.add(this.indicatorBg);
-    this.indicator = makeText(this, 0, -CAB_H / 2 - 18, 'R', 16, '#a06a35');
+    this.indicator = makeText(this, 0, -CAB_H / 2 - 18, '0', 16, '#a06a35');
     this.cab.add(this.indicator);
     this.setDoors(true, true);
 
@@ -808,7 +808,7 @@ export default class GameScene extends Phaser.Scene {
             const d = Math.abs(this.cabY(fl) - this.cab.y);
             if (d < best) { best = d; nearest = fl; }
           }
-          this.indicator.setText(nearest === 0 ? 'R' : `${nearest}`);
+          this.indicator.setText(nearest === 0 ? '0' : `${nearest}`);
         },
         onComplete: () => {
           this.cab.setX(CAB_X);
@@ -820,8 +820,8 @@ export default class GameScene extends Phaser.Scene {
 
   private arrive(f: number): void {
     this.elevatorFloor = f;
-    this.indicator.setText(f === 0 ? 'R' : `${f}`);
-    this.panelFloorText.setText(f === 0 ? 'Piso: R' : `Piso: ${f}`);
+    this.indicator.setText(f === 0 ? '0' : `${f}`);
+    this.panelFloorText.setText(f === 0 ? 'Piso: 0' : `Piso: ${f}`);
     this.setDoors(true);
     audio.ding();
     this.moving = false;
@@ -990,22 +990,23 @@ export default class GameScene extends Phaser.Scene {
       btn.g.fillStyle(0x000000, 0.12);
       btn.g.fillRoundedRect(x - w / 2, y - h / 2 + 3, w, h, 12);
       if (f === 0) {
-        btn.g.fillStyle(0x4ade80, 1); // Recepción: verde con R (sin check)
+        btn.g.fillStyle(0xffffff, 1); // Piso 0: blanco como los demás
       } else if (count > 0) {
         btn.g.fillStyle(floorColor(f), 1);
       } else if (isCurrent) {
         btn.g.fillStyle(0x4ade80, 1);
       } else {
-        btn.g.fillStyle(0xeef7f2, 1);
+        btn.g.fillStyle(0xffffff, 1); // Blanco con borde del color del piso
       }
       btn.g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
       btn.g.fillStyle(0xffffff, 0.25);
       btn.g.fillRoundedRect(x - w / 2 + 3, y - h / 2 + 2, w - 6, h * 0.36, 8);
-      btn.g.lineStyle(isCurrent ? 4 : 3, isCurrent ? 0x2f9e44 : 0xa06a35, isCurrent ? 1 : 0.55);
+      const borderColor = f === 0 ? 0x8a7a5a : floorColor(f);
+      btn.g.lineStyle(isCurrent ? 4 : 3, isCurrent ? 0x2f9e44 : borderColor, isCurrent ? 1 : 0.9);
       btn.g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-      // Número: blanco sobre color, color del piso sobre fondo claro
-      const colored = f === 0 || count > 0 || isCurrent;
-      btn.label.setColor(colored ? '#ffffff' : Phaser.Display.Color.IntegerToColor(floorColor(f)).rgba);
+      // Número: blanco sobre color, color del piso (o negro en Piso 0) sobre blanco
+      const colored = f !== 0 && (count > 0 || isCurrent);
+      btn.label.setColor(colored ? '#ffffff' : f === 0 ? '#241640' : Phaser.Display.Color.IntegerToColor(floorColor(f)).rgba);
       btn.label.setShadow(0, 2, 'rgba(0,0,0,0.25)', 2, true, true);
       btn.badgeBg.clear();
       if (count > 0) {
@@ -1031,22 +1032,22 @@ export default class GameScene extends Phaser.Scene {
     const queueCount = this.passengers.filter((p) => p.state === 'queue').length;
     if (this.level.id === 1) {
       if (this.onboard().length === 0 && this.elevatorFloor === 0 && this.delivered === 0) {
-        this.showBubble('¡Púlsalos para que entren!', 270, 802, 5000);
+        this.showBubble('¡Púlsalos para que entren!', 330, 620, 5000);
       } else if (this.onboard().length > 0 && this.elevatorFloor === 0) {
-        this.showBubble('¡Ahora toca el piso del globo!', 270, 802, 4000);
+        this.showBubble('¡Ahora toca el piso del globo!', 330, 620, 4000);
       } else if (this.elevatorFloor !== 0 && this.onboard().length > 0) {
-        this.showBubble('¡Buen viaje!', 270, 802, 3000);
+        this.showBubble('¡Buen viaje!', 330, 620, 3000);
       } else if (this.delivered > 0 && this.onboard().length === 0 && this.elevatorFloor === 0) {
-        this.showBubble('¡Bien! Sube a los demás', 270, 802, 4000);
+        this.showBubble('¡Bien! Sube a los demás', 330, 620, 4000);
       }
       return;
     }
     if (this.elevatorFloor !== 0 && this.onboard().length === 0 && queueCount > 0) {
-      this.showBubble('¡Vuelve a recepción!', 270, 802, 3000);
+      this.showBubble('¡Vuelve a recepción!', 330, 620, 3000);
     } else if (this.elevatorFloor === 0 && queueCount > 0 && this.onboard().length === 0) {
-      this.showBubble('¡Púlsalos para que entren!', 270, 802, 4000);
+      this.showBubble('¡Púlsalos para que entren!', 330, 620, 4000);
     } else if (this.onboard().length > 0) {
-      this.showBubble('¡Toca el piso de los globos!', 270, 802, 3000);
+      this.showBubble('¡Toca el piso de los globos!', 330, 620, 3000);
     }
   }
 
@@ -1065,7 +1066,7 @@ export default class GameScene extends Phaser.Scene {
     }
     this.bubbleBg.fillStyle(0xffffff, 0.97);
     this.bubbleBg.fillPoints(pts, true);
-    this.bubbleBg.lineStyle(3, 0x6b4423, 1);
+    this.bubbleBg.lineStyle(3, 0x241640, 1);
     this.bubbleBg.strokePoints(pts, true);
     this.bubble.setPosition(x, y).setDepth(60).setVisible(true).setAlpha(1).setScale(0.6);
     this.bubbleText.setPosition(0, 0);
