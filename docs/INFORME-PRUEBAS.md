@@ -19,7 +19,7 @@ Ejecutar con `npm test`. Tres suites:
 
 - Existen exactamente 30 niveles con ids 1–30.
 - Todos los pasajeros usan monstruos existentes y destinos dentro de
-  `1..floors`; entre 3 y 10 pasajeros; capacidad ≥ 3; pisos 2–6.
+  `1..floors`; entre 3 y 10 pasajeros; capacidad ≥ 3; pisos 2–5.
 - Los gemelos siempre aparecen en pareja con el mismo destino.
 - La capacidad permite subir gigantes/gemelos.
 - **Los 30 niveles son completables**: el solver encuentra un recorrido

@@ -58,68 +58,68 @@ export const LEVELS: LevelDef[] = [
     P('sombrin', 5), P('sombrin', 1), P('glup', 2), P('draculin', 4), P('nube', 3), P('bubu', 5), P('chispa', 1),
   ]},
   // ── Niveles 11-15: planificar los viajes ────────────────────────────────
-  { id: 11, title: 'Hotel completo', floors: 6, capacity: 3, passengers: [
-    P('glup', 6), P('rufi', 5), P('nube', 4), P('moco', 3), P('bubu', 2), P('chispa', 1), P('draculin', 6), P('sombrin', 2),
+  { id: 11, title: 'Hotel completo', floors: 5, capacity: 3, passengers: [
+    P('glup', 5), P('rufi', 5), P('nube', 4), P('moco', 3), P('bubu', 2), P('chispa', 1), P('draculin', 5), P('sombrin', 2),
   ]},
-  { id: 12, title: 'Parejas de piso', floors: 6, capacity: 3, passengers: [
-    P('bubu', 6), P('chispa', 6), P('moco', 5), P('nube', 5), P('rufi', 4), P('glup', 3), P('draculin', 2), P('sombrin', 4),
+  { id: 12, title: 'Parejas de piso', floors: 5, capacity: 3, passengers: [
+    P('bubu', 5), P('chispa', 5), P('moco', 5), P('nube', 5), P('rufi', 4), P('glup', 3), P('draculin', 2), P('sombrin', 4),
   ]},
-  { id: 13, title: 'De punta a punta', floors: 6, capacity: 3, passengers: [
-    P('glup', 1), P('glup', 6), P('nube', 6), P('rufi', 1), P('moco', 6), P('bubu', 3), P('chispa', 3), P('draculin', 5),
+  { id: 13, title: 'De punta a punta', floors: 5, capacity: 3, passengers: [
+    P('glup', 1), P('glup', 5), P('nube', 5), P('rufi', 1), P('moco', 5), P('bubu', 3), P('chispa', 3), P('draculin', 5),
   ]},
-  { id: 14, title: 'Ascensor grande', floors: 6, capacity: 4, passengers: [
-    P('rufi', 6), P('nube', 2), P('moco', 5), P('bubu', 1), P('chispa', 4), P('glup', 3), P('draculin', 6), P('sombrin', 3),
+  { id: 14, title: 'Ascensor grande', floors: 5, capacity: 4, passengers: [
+    P('rufi', 5), P('nube', 2), P('moco', 5), P('bubu', 1), P('chispa', 4), P('glup', 3), P('draculin', 5), P('sombrin', 3),
   ]},
-  { id: 15, title: 'Hora punta', floors: 6, capacity: 4, passengers: [
-    P('glup', 6), P('nube', 6), P('moco', 1), P('bubu', 2), P('chispa', 5), P('rufi', 3), P('draculin', 4), P('sombrin', 6), P('glup', 2),
+  { id: 15, title: 'Hora punta', floors: 5, capacity: 4, passengers: [
+    P('glup', 5), P('nube', 5), P('moco', 1), P('bubu', 2), P('chispa', 5), P('rufi', 3), P('draculin', 4), P('sombrin', 5), P('glup', 2),
   ]},
   // ── Niveles 16-20: primeros monstruos especiales ────────────────────────
-  { id: 16, title: '¡Cuidado, gigante!', floors: 6, capacity: 4, passengers: [
-    P('gordito', 5), P('bubu', 1), P('chispa', 2), P('moco', 3), P('nube', 4), P('rufi', 6), P('glup', 2), P('draculin', 5),
+  { id: 16, title: '¡Cuidado, gigante!', floors: 5, capacity: 4, passengers: [
+    P('gordito', 5), P('bubu', 1), P('chispa', 2), P('moco', 3), P('nube', 4), P('rufi', 5), P('glup', 2), P('draculin', 5),
   ]},
-  { id: 17, title: 'Doble peso', floors: 6, capacity: 4, passengers: [
-    P('gordito', 2), P('gordito', 6), P('nube', 1), P('moco', 4), P('bubu', 5), P('chispa', 3), P('rufi', 2), P('glup', 4),
+  { id: 17, title: 'Doble peso', floors: 5, capacity: 4, passengers: [
+    P('gordito', 2), P('gordito', 5), P('nube', 1), P('moco', 4), P('bubu', 5), P('chispa', 3), P('rufi', 2), P('glup', 4),
   ]},
-  { id: 18, title: 'Gemelos inseparables', floors: 6, capacity: 4, passengers: [
-    P('gemelos', 4), P('gemelos', 4), P('bubu', 1), P('chispa', 6), P('moco', 2), P('nube', 5), P('rufi', 3), P('glup', 6),
+  { id: 18, title: 'Gemelos inseparables', floors: 5, capacity: 4, passengers: [
+    P('gemelos', 4), P('gemelos', 4), P('bubu', 1), P('chispa', 5), P('moco', 2), P('nube', 5), P('rufi', 3), P('glup', 5),
   ]},
-  { id: 19, title: 'Tímido y gemelos', floors: 6, capacity: 4, passengers: [
-    P('sombrin', 2), P('gemelos', 5), P('gemelos', 5), P('bubu', 6), P('chispa', 1), P('moco', 3), P('nube', 4), P('draculin', 6),
+  { id: 19, title: 'Tímido y gemelos', floors: 5, capacity: 4, passengers: [
+    P('sombrin', 2), P('gemelos', 5), P('gemelos', 5), P('bubu', 5), P('chispa', 1), P('moco', 3), P('nube', 4), P('draculin', 5),
   ]},
-  { id: 20, title: 'Viajes en solitario', floors: 6, capacity: 4, passengers: [
-    P('sombrin', 6), P('sombrin', 1), P('gemelos', 3), P('gemelos', 3), P('glup', 4), P('rufi', 5), P('bubu', 2), P('nube', 6),
+  { id: 20, title: 'Viajes en solitario', floors: 5, capacity: 4, passengers: [
+    P('sombrin', 5), P('sombrin', 1), P('gemelos', 3), P('gemelos', 3), P('glup', 4), P('rufi', 5), P('bubu', 2), P('nube', 5),
   ]},
   // ── Niveles 21-25: combinaciones de varias reglas ───────────────────────
-  { id: 21, title: 'Gigante y gemelos', floors: 6, capacity: 4, passengers: [
-    P('gordito', 3), P('gemelos', 6), P('gemelos', 6), P('bubu', 2), P('chispa', 5), P('moco', 1), P('nube', 4), P('glup', 3),
+  { id: 21, title: 'Gigante y gemelos', floors: 5, capacity: 4, passengers: [
+    P('gordito', 3), P('gemelos', 5), P('gemelos', 5), P('bubu', 2), P('chispa', 5), P('moco', 1), P('nube', 4), P('glup', 3),
   ]},
-  { id: 22, title: 'Buenas noches, Nocti', floors: 6, capacity: 4, passengers: [
-    P('nocti', 4), P('bubu', 1), P('chispa', 6), P('moco', 2), P('nube', 5), P('rufi', 3), P('glup', 4), P('draculin', 1),
+  { id: 22, title: 'Buenas noches, Nocti', floors: 5, capacity: 4, passengers: [
+    P('nocti', 4), P('bubu', 1), P('chispa', 5), P('moco', 2), P('nube', 5), P('rufi', 3), P('glup', 4), P('draculin', 1),
   ]},
-  { id: 23, title: 'Siesta colectiva', floors: 6, capacity: 4, passengers: [
-    P('nocti', 2), P('nocti', 5), P('sombrin', 4), P('bubu', 6), P('chispa', 3), P('moco', 6), P('nube', 1), P('glup', 2),
+  { id: 23, title: 'Siesta colectiva', floors: 5, capacity: 4, passengers: [
+    P('nocti', 2), P('nocti', 5), P('sombrin', 4), P('bubu', 5), P('chispa', 3), P('moco', 5), P('nube', 1), P('glup', 2),
   ]},
-  { id: 24, title: 'Atraviesa paredes', floors: 6, capacity: 4, passengers: [
-    P('fantasmita', 6), P('bubu', 1), P('chispa', 2), P('moco', 3), P('nube', 4), P('rufi', 5), P('glup', 6), P('draculin', 3),
+  { id: 24, title: 'Atraviesa paredes', floors: 5, capacity: 4, passengers: [
+    P('fantasmita', 5), P('bubu', 1), P('chispa', 2), P('moco', 3), P('nube', 4), P('rufi', 5), P('glup', 5), P('draculin', 3),
   ]},
-  { id: 25, title: 'Fantasma y gigante', floors: 6, capacity: 4, passengers: [
-    P('fantasmita', 2), P('fantasmita', 5), P('gordito', 4), P('bubu', 6), P('chispa', 1), P('moco', 5), P('nube', 3), P('rufi', 6),
+  { id: 25, title: 'Fantasma y gigante', floors: 5, capacity: 4, passengers: [
+    P('fantasmita', 2), P('fantasmita', 5), P('gordito', 4), P('bubu', 5), P('chispa', 1), P('moco', 5), P('nube', 3), P('rufi', 5),
   ]},
   // ── Niveles 26-30: rompecabezas exigentes ──────────────────────────────
-  { id: 26, title: 'Todo junto', floors: 6, capacity: 4, passengers: [
-    P('gemelos', 2), P('gemelos', 2), P('nocti', 5), P('fantasmita', 4), P('bubu', 6), P('chispa', 1), P('moco', 3), P('nube', 6), P('glup', 1),
+  { id: 26, title: 'Todo junto', floors: 5, capacity: 4, passengers: [
+    P('gemelos', 2), P('gemelos', 2), P('nocti', 5), P('fantasmita', 4), P('bubu', 5), P('chispa', 1), P('moco', 3), P('nube', 5), P('glup', 1),
   ]},
-  { id: 27, title: 'Noche en el hotel', floors: 6, capacity: 4, passengers: [
-    P('nocti', 6), P('nocti', 1), P('sombrin', 3), P('fantasmita', 5), P('gordito', 2), P('bubu', 4), P('chispa', 6), P('moco', 5), P('nube', 2), P('glup', 3),
+  { id: 27, title: 'Noche en el hotel', floors: 5, capacity: 4, passengers: [
+    P('nocti', 5), P('nocti', 1), P('sombrin', 3), P('fantasmita', 5), P('gordito', 2), P('bubu', 4), P('chispa', 5), P('moco', 5), P('nube', 2), P('glup', 3),
   ]},
-  { id: 28, title: 'Peso pesado', floors: 6, capacity: 4, passengers: [
-    P('gordito', 6), P('gordito', 1), P('gemelos', 4), P('gemelos', 4), P('bubu', 3), P('chispa', 5), P('moco', 2), P('nube', 6), P('rufi', 4), P('glup', 5),
+  { id: 28, title: 'Peso pesado', floors: 5, capacity: 4, passengers: [
+    P('gordito', 5), P('gordito', 1), P('gemelos', 4), P('gemelos', 4), P('bubu', 3), P('chispa', 5), P('moco', 2), P('nube', 5), P('rufi', 4), P('glup', 5),
   ]},
-  { id: 29, title: 'Dulces sueños', floors: 6, capacity: 4, passengers: [
-    P('sombrin', 5), P('sombrin', 2), P('nocti', 4), P('nocti', 6), P('fantasmita', 1), P('bubu', 3), P('chispa', 6), P('moco', 4), P('nube', 5), P('glup', 2),
+  { id: 29, title: 'Dulces sueños', floors: 5, capacity: 4, passengers: [
+    P('sombrin', 5), P('sombrin', 2), P('nocti', 4), P('nocti', 5), P('fantasmita', 1), P('bubu', 3), P('chispa', 5), P('moco', 4), P('nube', 5), P('glup', 2),
   ]},
-  { id: 30, title: '¡La gran noche!', floors: 6, capacity: 4, passengers: [
-    P('gordito', 5), P('gemelos', 3), P('gemelos', 3), P('nocti', 6), P('fantasmita', 2), P('sombrin', 4), P('bubu', 1), P('chispa', 6), P('moco', 2), P('nube', 4),
+  { id: 30, title: '¡La gran noche!', floors: 5, capacity: 4, passengers: [
+    P('gordito', 5), P('gemelos', 3), P('gemelos', 3), P('nocti', 5), P('fantasmita', 2), P('sombrin', 4), P('bubu', 1), P('chispa', 5), P('moco', 2), P('nube', 4),
   ]},
 ];
 

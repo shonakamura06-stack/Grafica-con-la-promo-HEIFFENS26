@@ -20,7 +20,7 @@ describe('datos de niveles', () => {
       expect(lvl.passengers.length).toBeLessThanOrEqual(10);
       expect(lvl.capacity).toBeGreaterThanOrEqual(3);
       expect(lvl.floors).toBeGreaterThanOrEqual(2);
-      expect(lvl.floors).toBeLessThanOrEqual(6);
+      expect(lvl.floors).toBeLessThanOrEqual(5);
       for (const p of lvl.passengers) {
         expect(MONSTER_MAP[p.m], `nivel ${lvl.id}: monstruo ${p.m}`).toBeDefined();
         expect(p.d).toBeGreaterThanOrEqual(1);

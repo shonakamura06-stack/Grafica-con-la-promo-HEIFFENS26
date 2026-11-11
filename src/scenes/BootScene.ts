@@ -1,9 +1,12 @@
 /**
  * Escena de arranque — genera TODAS las texturas del juego de forma
  * procedural (arte vectorial original, sin recursos externos).
- * Estilo kawaii pastel: colores suaves, contorno grueso marrón,
- * mejillas rosas y brillos. Cada monstruo se dibuja en 3 ánimos:
- * feliz, neutral y enojado.
+ *
+ * Los 12 monstruos son diseños 100 % originales creados para este juego:
+ * cada uno tiene silueta, accesorios y personalidad propios (antenas de
+ * estrella, rayo en la panza, gorro de fiesta, alas, lunares…). No se
+ * copia ni se traza ninguna imagen de referencia.
+ * Cada monstruo se dibuja en 3 ánimos: feliz, neutral y enojado.
  */
 
 import Phaser from 'phaser';
@@ -72,16 +75,26 @@ function outlineCircle(g: G, x: number, y: number, r: number): void {
   g.strokeCircle(x, y, r);
 }
 
+/** Estrella pequeña (para antenas, horquillas y decoración). */
+function star(g: G, x: number, y: number, r: number, color: number): void {
+  const pts: Phaser.Math.Vector2[] = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    pts.push(new Phaser.Math.Vector2(x + Math.cos(a) * rr, y + Math.sin(a) * rr));
+  }
+  g.fillStyle(color, 1);
+  g.fillPoints(pts, true);
+}
+
 const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
+  // Bubu: morado de un ojo con antenas de estrella y estrella en la panza
   bubu(g, mood) {
     g.lineStyle(4, OUT, 1);
     g.lineBetween(C - 26, 36, C - 30, 14);
     g.lineBetween(C + 26, 36, C + 30, 14);
-    g.fillStyle(0xffd678, 1);
-    g.fillCircle(C - 30, 11, 8);
-    g.fillCircle(C + 30, 11, 8);
-    outlineCircle(g, C - 30, 11, 8);
-    outlineCircle(g, C + 30, 11, 8);
+    star(g, C - 30, 11, 9, 0xffd678);
+    star(g, C + 30, 11, 9, 0xffd678);
     g.fillStyle(0xa855f7, 1);
     g.fillEllipse(C, 72, 92, 84);
     outlineEllipse(g, C, 72, 92, 84);
@@ -92,9 +105,11 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     if (mood === 'angry') angryBrows(g, C, 60, 14);
     mouth(g, mood, C, 80, 15);
     cheeks(g, C, 84, 30);
+    star(g, C, 96, 7, 0xffd678);
     g.fillStyle(0xffffff, 0.4);
     g.fillEllipse(C - 26, 48, 18, 12);
   },
+  // Chispa: amarilla eléctrica con mechón de rayo y rayo en la panza
   chispa(g, mood) {
     g.fillStyle(0xfacc15, 1);
     for (let i = 0; i < 8; i++) {
@@ -126,8 +141,16 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     } else {
       mouth(g, mood, C, 80, 12);
     }
+    // Rayo naranja en la panza (su marca)
+    g.fillStyle(0xfb923c, 1);
+    g.fillPoints([
+      new Phaser.Math.Vector2(C + 4, 92), new Phaser.Math.Vector2(C - 5, 104),
+      new Phaser.Math.Vector2(C - 1, 104), new Phaser.Math.Vector2(C - 4, 112),
+      new Phaser.Math.Vector2(C + 6, 100), new Phaser.Math.Vector2(C + 2, 100),
+    ], true);
     cheeks(g, C, 84, 24);
   },
+  // Moco: verde gelatinoso con ojos en tallos, nariz gota y borde ondulado
   moco(g, mood) {
     g.fillStyle(0x4ade80, 1);
     g.fillCircle(C, 66, 40);
@@ -144,9 +167,18 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     eye(g, C + 16, 30, 8, 4.5, 2);
     if (mood === 'angry') angryBrows(g, C, 30, 16);
     mouth(g, mood, C, 76, 12, 0x166534);
+    // Nariz gota + borde ondulado inferior
+    g.fillStyle(0x86efac, 1);
+    g.fillCircle(C, 84, 5);
+    g.fillTriangle(C - 4, 82, C + 4, 82, C, 72);
+    g.fillStyle(0x4ade80, 1);
+    g.fillCircle(C - 22, 104, 8);
+    g.fillCircle(C, 108, 8);
+    g.fillCircle(C + 22, 104, 8);
     g.fillStyle(0xffffff, 0.45);
     g.fillEllipse(C - 18, 58, 16, 26);
   },
+  // Nube: azul nube con horquilla de estrella y gotitas
   nube(g, mood) {
     g.fillStyle(0x60a5fa, 1);
     g.fillCircle(C - 26, 74, 22);
@@ -166,18 +198,25 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     } else {
       mouth(g, mood, C, 86, 9, 0x2563eb);
     }
+    star(g, C + 22, 44, 8, 0xffd678);
     cheeks(g, C, 84, 26);
     g.fillStyle(0x60a5fa, 0.9);
     g.fillCircle(C + 40, 100, 5);
     g.fillCircle(C + 46, 110, 3.5);
   },
+  // Draculín: vampiro con alas de murciélago y pajarita con gema
   draculin(g, mood) {
     g.fillStyle(0x7c3aed, 1);
     g.fillTriangle(C - 30, 108, C + 30, 108, C, 62);
+    // Alas de murciélago
+    g.fillTriangle(C - 34, 66, C - 56, 52, C - 50, 76);
+    g.fillTriangle(C - 50, 76, C - 44, 66, C - 38, 78);
+    g.fillTriangle(C + 34, 66, C + 56, 52, C + 50, 76);
+    g.fillTriangle(C + 50, 76, C + 44, 66, C + 38, 78);
     g.fillStyle(0xfff1f2, 1);
     g.fillCircle(C, 62, 36);
     outlineCircle(g, C, 62, 36);
-    g.fillStyle(0x6d28d9, 1);
+    g.fillStyle(0x7c3aed, 1);
     g.slice(C, 58, 37, Math.PI, Math.PI * 2, false);
     g.fillPath();
     g.fillTriangle(C - 36, 56, C - 50, 44, C - 34, 44);
@@ -198,7 +237,10 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillTriangle(C - 2, 100, C - 14, 94, C - 14, 106);
     g.fillTriangle(C + 2, 100, C + 14, 94, C + 14, 106);
     g.fillCircle(C, 100, 4);
+    g.fillStyle(0xffd678, 1);
+    g.fillCircle(C, 100, 2.5);
   },
+  // Rufi: naranja peludo con pecas, cola rizada y dientes de conejo
   rufi(g, mood) {
     g.fillStyle(0xfb923c, 1);
     for (let i = 0; i < 10; i++) {
@@ -207,6 +249,10 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     }
     g.fillCircle(C, 68, 38);
     outlineCircle(g, C, 68, 38);
+    // Cola rizada
+    g.fillStyle(0xfb923c, 1);
+    g.fillCircle(C + 48, 92, 10);
+    outlineCircle(g, C + 48, 92, 10);
     g.fillStyle(0xea580c, 1);
     g.fillCircle(C - 30, 34, 15);
     g.fillCircle(C + 30, 34, 15);
@@ -228,16 +274,28 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     } else {
       mouth(g, mood, C, 86, 10, 0x7c2d12);
     }
+    // Pecas
+    g.fillStyle(0xc2410c, 1);
+    g.fillCircle(C - 24, 74, 2.2);
+    g.fillCircle(C - 19, 78, 2.2);
+    g.fillCircle(C + 24, 74, 2.2);
+    g.fillCircle(C + 19, 78, 2.2);
     cheeks(g, C, 78, 26);
   },
+  // Glup: turquesa acuático con mechón de algas y aletas
   glup(g, mood) {
     g.fillStyle(0x2dd4bf, 1);
     g.fillEllipse(C, 72, 78, 88);
     outlineEllipse(g, C, 72, 78, 88);
     g.fillTriangle(C - 8, 30, C + 16, 30, C + 4, 8);
     g.fillTriangle(C - 38, 66, C - 56, 78, C - 36, 84);
+    g.fillTriangle(C + 38, 66, C + 56, 78, C + 36, 84);
     g.fillStyle(0x99f6e4, 1);
     g.fillEllipse(C, 84, 48, 52);
+    // Mechón de algas
+    g.lineStyle(4, 0x16a34a, 1);
+    g.beginPath(); g.moveTo(C - 6, 30); g.lineTo(C - 10, 16); g.strokePath();
+    g.beginPath(); g.moveTo(C + 4, 30); g.lineTo(C + 8, 14); g.strokePath();
     eye(g, C - 14, 60, 12, 6.5);
     eye(g, C + 14, 60, 12, 6.5);
     if (mood === 'angry') angryBrows(g, C, 60, 14);
@@ -253,13 +311,14 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.strokeCircle(C + 28, 18, 4);
     cheeks(g, C, 80, 26);
   },
+  // Sombrín: azul oscuro tímido con gorro de luna, manta y estrellitas
   sombrin(g, mood) {
     g.fillStyle(0x475569, 1);
     g.fillCircle(C, 70, 40);
     outlineCircle(g, C, 70, 40);
     g.fillStyle(0xfacc15, 1);
     g.fillCircle(C + 6, 28, 15);
-    g.fillStyle(0x64748b, 1);
+    g.fillStyle(0x475569, 1);
     g.fillCircle(C + 13, 24, 13);
     g.fillStyle(0x64748b, 1);
     g.fillEllipse(C, 88, 56, 36);
@@ -270,13 +329,25 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillStyle(0xcbd5e1, 0.6);
     g.fillCircle(C - 24, 78, 6);
     g.fillCircle(C + 24, 78, 6);
+    // Estrellitas flotantes
+    star(g, C - 40, 40, 6, 0xfde68a);
+    star(g, C + 42, 52, 5, 0xfde68a);
   },
+  // Gordito: gigante rosa con corona, lunares y alitas
   gordito(g, mood) {
+    g.fillStyle(0xffffff, 0.95);
+    g.fillEllipse(C - 54, 66, 26, 14);
+    g.fillEllipse(C + 54, 66, 26, 14);
     g.fillStyle(0xf472b6, 1);
     g.fillEllipse(C, 72, 104, 92);
     outlineEllipse(g, C, 72, 104, 92);
     g.fillStyle(0xf9a8d4, 1);
     g.fillEllipse(C, 88, 64, 48);
+    // Lunares
+    g.fillStyle(0xf472b6, 0.8);
+    g.fillCircle(C - 30, 78, 6);
+    g.fillCircle(C + 28, 88, 5);
+    g.fillCircle(C + 12, 100, 4);
     g.fillStyle(0xffd678, 1);
     g.fillPoints([
       new Phaser.Math.Vector2(C - 20, 30), new Phaser.Math.Vector2(C - 20, 12),
@@ -295,8 +366,9 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillStyle(0xffffff, 0.4);
     g.fillEllipse(C - 30, 44, 22, 14);
   },
+  // Gemelos: pareja turquesa con antenas; uno lleva gorro de fiesta
   gemelos(g, mood) {
-    const drawTwin = (cx: number) => {
+    const drawTwin = (cx: number, partyHat: boolean) => {
       g.fillStyle(0x2dd4bf, 1);
       g.fillCircle(cx, 78, 27);
       outlineCircle(g, cx, 78, 27);
@@ -304,6 +376,12 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
       g.lineBetween(cx, 52, cx, 40);
       g.fillStyle(0xffd678, 1);
       g.fillCircle(cx, 37, 6);
+      if (partyHat) {
+        g.fillStyle(0xf472b6, 1);
+        g.fillTriangle(cx - 9, 54, cx + 9, 54, cx, 34);
+        g.fillStyle(0xffffff, 1);
+        g.fillCircle(cx, 33, 4);
+      }
       eye(g, cx - 9, 74, 8, 4.5);
       eye(g, cx + 9, 74, 8, 4.5);
       if (mood === 'angry') angryBrows(g, cx, 74, 9);
@@ -312,16 +390,20 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
       g.fillTriangle(cx - 1, 100, cx - 10, 95, cx - 10, 105);
       g.fillTriangle(cx + 1, 100, cx + 10, 95, cx + 10, 105);
     };
-    drawTwin(38);
-    drawTwin(90);
+    drawTwin(38, false);
+    drawTwin(90, true);
     g.fillStyle(0xf472b6, 1);
     g.fillCircle(C, 52, 6);
     g.fillTriangle(C - 6, 52, C + 6, 52, C, 62);
   },
+  // Nocti: búho sonámbulo con gorro de dormir, plumas y pantuflas de luna
   nocti(g, mood) {
     g.fillStyle(0x818cf8, 1);
     g.fillCircle(C, 70, 40);
     outlineCircle(g, C, 70, 40);
+    // Plumitas laterales
+    g.fillTriangle(C - 38, 52, C - 50, 44, C - 46, 60);
+    g.fillTriangle(C + 38, 52, C + 50, 44, C + 46, 60);
     g.fillStyle(0xc7d2fe, 1);
     g.fillCircle(C, 72, 29);
     g.fillStyle(0x4f46e5, 1);
@@ -339,11 +421,16 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     if (mood === 'angry') angryBrows(g, C, 68, 12);
     g.fillStyle(0xfdba74, 1);
     g.fillTriangle(C - 5, 78, C + 5, 78, C, 86);
+    // Pantuflas de luna
+    g.fillStyle(0xfacc15, 1);
+    g.fillEllipse(C - 16, 108, 18, 10);
+    g.fillEllipse(C + 16, 108, 18, 10);
     g.lineStyle(3, 0x4f46e5, 1);
     g.lineBetween(C + 34, 30, C + 42, 30);
     g.lineBetween(C + 38, 34, C + 46, 34);
     g.lineBetween(C + 34, 38, C + 42, 38);
   },
+  // Fantasmita: fantasma con moño rosa y mejillas grandes
   fantasmita(g, mood) {
     g.fillStyle(0xf8fafc, 0.97);
     g.fillCircle(C, 62, 36);
@@ -363,6 +450,11 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
       mouth(g, mood, C, 78, 9, 0x64748b);
     }
     cheeks(g, C, 76, 24);
+    // Moño rosa
+    g.fillStyle(0xf472b6, 1);
+    g.fillTriangle(C + 18, 30, C + 32, 22, C + 34, 36);
+    g.fillTriangle(C + 18, 30, C + 32, 38, C + 34, 24);
+    g.fillCircle(C + 18, 30, 4);
     g.fillStyle(0xf8fafc, 0.97);
     g.fillEllipse(C - 40, 76, 16, 10);
     g.fillEllipse(C + 40, 76, 16, 10);

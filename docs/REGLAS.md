@@ -70,10 +70,10 @@ una tarjeta visual. Después queda registrada en el álbum.
 |---|---|---|
 | Aprendizaje | 1–5 | Mecánica básica, 2–4 pisos |
 | Más pasajeros | 6–10 | Hasta 7 pasajeros, 5 pisos, Sombrín |
-| Planificar viajes | 11–15 | 6 pisos, capacidad 4 (nivel 14) |
+| Planificar viajes | 11–15 | 5 pisos, capacidad 4 (nivel 14) |
 | Especiales I | 16–20 | Gordito, gemelos |
 | Especiales II | 21–25 | Nocti, Fantasmita, combinaciones |
-| Desafío final | 26–30 | Hasta 10 pasajeros con varias reglas |
+| Desafío final | 26–30 | 5 pisos, hasta 10 pasajeros con varias reglas |
 
 ## Controles
 
