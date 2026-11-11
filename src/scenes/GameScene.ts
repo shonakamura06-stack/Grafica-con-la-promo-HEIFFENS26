@@ -269,13 +269,6 @@ export default class GameScene extends Phaser.Scene {
       // Banner con el número del piso colgado de la ventana
       this.drawBanner(g, BUILD_LEFT + 32, top + fh * 0.22 - 2, f, color);
     }
-    // Ventanas redondas en el piso superior
-    this.drawRoundWindow(g, BUILD_LEFT + 48, BUILD_TOP + 26);
-    this.drawRoundWindow(g, BUILD_RIGHT - 48, BUILD_TOP + 26);
-    // Nubecita asomada en una barandilla
-    const midFloor = Math.max(1, Math.floor(N / 2));
-    const peek = this.add.image(BUILD_LEFT + 72, this.bandBottom(midFloor) - fh * 0.68 - 4, 'cloud').setScale(0.42);
-    this.tweens.add({ targets: peek, y: peek.y - 5, duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // ── Lobby: ventanales con vista al exterior ──
     const glassY = LOBBY_TOP + 8;
@@ -324,15 +317,6 @@ export default class GameScene extends Phaser.Scene {
     g.fillRoundedRect(deskX, deskY + 8, 112, 56, 8);
     g.fillStyle(0xa06a35, 1);
     g.fillRoundedRect(deskX - 4, deskY, 120, 14, 6);
-    // Planta y monitor sobre el mostrador
-    g.fillStyle(0xe07b2a, 1);
-    g.fillRoundedRect(deskX + 8, deskY - 14, 14, 14, 3);
-    g.fillStyle(0x4ade80, 1);
-    g.fillCircle(deskX + 15, deskY - 20, 8);
-    g.fillStyle(0x241640, 1);
-    g.fillRoundedRect(deskX + 88, deskY - 20, 20, 16, 3);
-    g.fillStyle(0x9fd8ff, 1);
-    g.fillRect(deskX + 91, deskY - 17, 14, 10);
     // Cartel de recepción
     g.fillStyle(0xa06a35, 1);
     g.fillRoundedRect(deskX + 6, deskY - 58, 100, 24, 8);
@@ -355,12 +339,6 @@ export default class GameScene extends Phaser.Scene {
     }
     this.drawBench(g, 18, 896, 100);
     this.drawBench(g, W - 118, 896, 100);
-    const flowerColors = [0xf472b6, 0xffc93c, 0xffffff, 0xf87171, 0xc084fc];
-    for (let i = 0; i < 8; i++) {
-      const fx = 140 + i * 36;
-      const fy = 936 + (i % 2) * 8;
-      this.drawFlower(g, fx, fy, flowerColors[i % flowerColors.length]);
-    }
   }
 
   private drawWindow(g: Phaser.GameObjects.Graphics, x: number, y: number, lit: boolean): void {
@@ -377,18 +355,6 @@ export default class GameScene extends Phaser.Scene {
     g.fillTriangle(x + 6, y + h, x + 16, y, x + 26, y);
     g.fillStyle(0xffffff, 0.6);
     g.fillRect(x + w / 2 - 1, y, 2, h);
-  }
-
-  private drawRoundWindow(g: Phaser.GameObjects.Graphics, x: number, y: number): void {
-    g.fillStyle(0xffffff, 1);
-    g.fillCircle(x, y, 20);
-    g.fillStyle(0xbfe8ff, 1);
-    g.fillCircle(x, y, 15);
-    g.fillStyle(0xffffff, 0.5);
-    g.fillCircle(x - 5, y - 5, 5);
-    g.lineStyle(2, 0xa06a35, 0.7);
-    g.lineBetween(x - 15, y, x + 15, y);
-    g.lineBetween(x, y - 15, x, y + 15);
   }
 
   private drawRailing(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, color: number): void {
@@ -429,16 +395,6 @@ export default class GameScene extends Phaser.Scene {
     g.fillStyle(0x7c4f24, 1);
     g.fillRect(x + 8, y + 26, 8, 18);
     g.fillRect(x + w - 16, y + 26, 8, 18);
-  }
-
-  private drawFlower(g: Phaser.GameObjects.Graphics, x: number, y: number, color: number): void {
-    g.fillStyle(color, 1);
-    g.fillCircle(x, y - 5, 4);
-    g.fillCircle(x - 5, y, 4);
-    g.fillCircle(x + 5, y, 4);
-    g.fillCircle(x, y + 5, 4);
-    g.fillStyle(0xffc93c, 1);
-    g.fillCircle(x, y, 3);
   }
 
   private drawHud(): void {
@@ -494,7 +450,7 @@ export default class GameScene extends Phaser.Scene {
     g.lineStyle(5, 0xa06a35, 1);
     g.strokeRoundedRect(392, 104, 128, 470, 16);
     makeText(this, 456, 122, 'ASCENSOR', 15, '#a06a35');
-    this.panelFloorText = makeText(this, 456, 142, 'Piso: R', 14, '#e07b2a', false);
+    this.panelFloorText = makeText(this, 456, 142, 'Piso: 0', 14, '#e07b2a', false);
 
     const floors: number[] = [];
     for (let f = N; f >= 1; f--) floors.push(f);
@@ -506,7 +462,7 @@ export default class GameScene extends Phaser.Scene {
       const bg = this.add.graphics();
       const badgeBg = this.add.graphics();
       const badge = makeText(this, x + w / 2 - 12, y - h / 2 + 10, '', 13, '#6b4423');
-      const label = makeText(this, x, y, f === 0 ? 'R' : `${f}`, 24, '#ffffff');
+      const label = makeText(this, x, y, f === 0 ? 'Piso 0' : `${f}`, f === 0 ? 18 : 24, '#ffffff');
       this.floorButtons.set(f, { g: bg, badge, badgeBg, label });
       const zone = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
       zone.on('pointerdown', () => {
@@ -582,7 +538,7 @@ export default class GameScene extends Phaser.Scene {
     this.indicatorBg.lineStyle(3, 0xa06a35, 1);
     this.indicatorBg.strokeRoundedRect(-24, -CAB_H / 2 - 30, 48, 24, 8);
     this.cab.add(this.indicatorBg);
-    this.indicator = makeText(this, 0, -CAB_H / 2 - 18, 'R', 16, '#a06a35');
+    this.indicator = makeText(this, 0, -CAB_H / 2 - 18, '0', 16, '#a06a35');
     this.cab.add(this.indicator);
     this.setDoors(true, true);
 
@@ -808,7 +764,7 @@ export default class GameScene extends Phaser.Scene {
             const d = Math.abs(this.cabY(fl) - this.cab.y);
             if (d < best) { best = d; nearest = fl; }
           }
-          this.indicator.setText(nearest === 0 ? 'R' : `${nearest}`);
+          this.indicator.setText(nearest === 0 ? '0' : `${nearest}`);
         },
         onComplete: () => {
           this.cab.setX(CAB_X);
@@ -820,8 +776,8 @@ export default class GameScene extends Phaser.Scene {
 
   private arrive(f: number): void {
     this.elevatorFloor = f;
-    this.indicator.setText(f === 0 ? 'R' : `${f}`);
-    this.panelFloorText.setText(f === 0 ? 'Piso: R' : `Piso: ${f}`);
+    this.indicator.setText(f === 0 ? '0' : `${f}`);
+    this.panelFloorText.setText(f === 0 ? 'Piso: 0' : `Piso: ${f}`);
     this.setDoors(true);
     audio.ding();
     this.moving = false;
@@ -990,7 +946,7 @@ export default class GameScene extends Phaser.Scene {
       btn.g.fillStyle(0x000000, 0.12);
       btn.g.fillRoundedRect(x - w / 2, y - h / 2 + 3, w, h, 12);
       if (f === 0) {
-        btn.g.fillStyle(0x4ade80, 1); // Recepción: verde con R (sin check)
+        btn.g.fillStyle(0xfff3d6, 1); // Piso 0: crema normal (sin check verde)
       } else if (count > 0) {
         btn.g.fillStyle(floorColor(f), 1);
       } else if (isCurrent) {
@@ -1003,9 +959,9 @@ export default class GameScene extends Phaser.Scene {
       btn.g.fillRoundedRect(x - w / 2 + 3, y - h / 2 + 2, w - 6, h * 0.36, 8);
       btn.g.lineStyle(isCurrent ? 4 : 3, isCurrent ? 0x2f9e44 : 0xa06a35, isCurrent ? 1 : 0.55);
       btn.g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-      // Número: blanco sobre color, color del piso sobre fondo claro
-      const colored = f === 0 || count > 0 || isCurrent;
-      btn.label.setColor(colored ? '#ffffff' : Phaser.Display.Color.IntegerToColor(floorColor(f)).rgba);
+      // Número: blanco sobre color, color del piso (o marrón en Piso 0) sobre fondo claro
+      const colored = f !== 0 && (count > 0 || isCurrent);
+      btn.label.setColor(colored ? '#ffffff' : f === 0 ? '#6b4423' : Phaser.Display.Color.IntegerToColor(floorColor(f)).rgba);
       btn.label.setShadow(0, 2, 'rgba(0,0,0,0.25)', 2, true, true);
       btn.badgeBg.clear();
       if (count > 0) {
@@ -1078,7 +1034,7 @@ export default class GameScene extends Phaser.Scene {
 
   private createBubble(): void {
     this.bubbleBg = this.add.graphics();
-    this.bubbleText = makeText(this, 0, 0, '', 17, '#6b4423', false);
+    this.bubbleText = makeText(this, 0, 0, '', 18, '#6b4423', false);
     this.bubble = this.add.container(0, 0, [this.bubbleBg, this.bubbleText]).setVisible(false);
   }
 

@@ -13,7 +13,7 @@ ascensor, respetando su capacidad y las reglas especiales de cada huésped.
   desde el nivel 14). No se puede subir a nadie si no cabe.
 - **Viajar:** toca un piso del panel. El ascensor se desplaza y los
   pasajeros de ese piso salen automáticamente con una animación.
-- **Recepción (R):** el ascensor puede volver a recepción en cualquier
+- **Piso 0 (Recepción):** el ascensor puede volver a recepción en cualquier
   momento. Cuando queda vacío, vuelve solo automáticamente.
 - **Piso equivocado:** si viajas a un piso sin pasajeros destinados, la
   pantalla muestra bordes rojos y «¡PISO EQUIVOCADO!» en grande, y la
