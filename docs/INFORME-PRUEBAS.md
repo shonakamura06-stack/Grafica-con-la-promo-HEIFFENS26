@@ -2,10 +2,10 @@
 
 Fecha: 2026-11-10 · Versión del juego: 1.1.0 (renovación visual kawaii pastel + drama de piso equivocado)
 
-> **Recuento vigente: 218 pruebas en 8 archivos, todas en verde** (`npm test`).
+> **Recuento vigente: 332 pruebas en 11 archivos, todas en verde** (`npm test`).
 > Las secciones siguientes son históricas y se conservan tal cual; lo que está en
-> vigor es la última actualización, «Opción B: el reloj permite recuperarse de un
-> error grave».
+> vigor es la última actualización, «Sprint 2: personalidad e identidad de los 20
+> monstruos».
 
 ## Pruebas automatizadas (Vitest) — ✅ 31/31 superadas
 
@@ -565,3 +565,111 @@ fuera de las pruebas), pero sí en la comprobabilidad del modelo.
   niveles con cabinas de 5 o edificios donde todos quieran el ático, el techo uniforme se queda
   corto: la prueba «el error grave se calcula con el PEOR caso medido» fallará y habrá que
   recalcularlo. Está documentado en `docs/ANADIR-NIVELES.md`.
+
+---
+
+## Actualización Sprint 2 — Personalidad e identidad de los 20 monstruos
+
+Fecha: 2026-11-10 · Punto de partida: commit `821bed3` (opción B cerrada) ·
+Etiqueta previa conservada: `opcionB/821bed3-tiempo-definitivo`
+
+> **332 pruebas en 11 archivos, todas en verde.** Se añaden 114 pruebas nuevas en
+> tres archivos (`personality.test.ts` 52, `queueLayout.test.ts` 35,
+> `identity.test.ts` 27). Las 218 anteriores siguen pasando sin cambios: la
+> personalidad no toca las reglas, la economía, los niveles ni los cronómetros.
+
+### Lo que se ha medido de verdad (no proyectado)
+
+| Comprobación | Cómo se mide | Resultado |
+|---|---|---|
+| Cola sin solapes en los 30 niveles | `layoutQueue` con los sprites reales de cada nivel (`overlapsInRow`) | 0 solapes en 30/30 |
+| Cola sin salirse del área útil | `outOfArea` sobre los 30 niveles + el peor caso (los 20 monstruos a la vez) | 0 salidas |
+| Peor caso imaginable (20 sprites) | ancho de fila 758,8 px en un área de 512 px | se resuelve con `fitScale` 0,685 y separación de 6 px (encogido uniforme, nunca solapando) |
+| Reposo dentro de límites | `idleFrame` en 20 estilos × 437 instantes | 0 fotogramas fuera de `IDLE_BOUNDS` |
+| Presets acotados | 10 de entrada/salida + 5 reacciones | ninguno pasa de 900 ms ni de 4 repeticiones |
+| Voces completas | 20 monstruos × 4 situaciones | 20/20 con ≥4 espera, ≥3 llegada, ≥2 error, ≥2 bloqueo y 0 duplicados: **277 frases propias** en total |
+| Frases distintas de verdad | cada frase comparada con las de los otros 19 y con las genéricas por categoría | 0 frases compartidas entre personajes y 0 que repitan una genérica |
+| `{d}` sin destino | todas las frases de error/bloqueo/encuentro | 0 huecos vacíos (`sinDestino()` filtra las reservas genéricas) |
+| Texturas de cara | claves que pide el animador contra las que genera `BootScene` | 90 texturas (60 ánimos + 18 parpadeos + 12 miradas), ninguna inexistente |
+| Sonidos característicos | 18 claves de `personality.ts` contra los métodos de `audio.ts` | 18/18 existen, todos ≤0,3 s y ≤0,16 de volumen, sin ficheros |
+| El puzle intacto | huella de los 30 niveles (pisos, capacidad, pasajeros, parejas, enemigos, `timeLimit`) + óptimos del solver | Σ 4255 s y óptimos `2 5 5 8 8 8 11 13 15 17 19 19 19 19 19 19 17 21 21 21 19 21 23 25 25 25 25 23 27 27` |
+| Coste por fotograma | `tools/medir-personalidad.ts` con 10 pasajeros (el peor nivel) | ~10 µs = 0,06 % de los 16 667 µs de un fotograma a 60 FPS |
+
+### Fallos reales que han destapado las pruebas nuevas
+
+1. **`wobble`, `spark`, `listen` y `grump` ignoraban la amplitud del personaje.**
+   Estaban escritos con constantes (`sx: 1 - 0.08 * s`) en vez de usar `a`, así que
+   Moco y Gordito se aplastaban igual aunque su `amp` difiera cinco veces, y Gruñón
+   directamente no se movía nada (era una estatua). Ahora los cuatro escalan con `a`.
+2. **`REACTION_PRESETS.sleepy` duraba 1260 ms**, por encima del tope de 900 ms que
+   declara el propio módulo: Nocti cabeceaba más de un segundo seguido al despertar.
+   `presetDuration` cuenta el `yoyo` y las repeticiones, así que dos tramos de
+   420 ms con `yoyo` y `repeat: 1` suman 1260 ms, no 840. Bajado a 300 ms por
+   tramo: la reacción dura ahora exactamente 900 ms, en el tope.
+3. **Pegajón tenía la manía `mirror`** (imitar al vecino) cuando su regla es `duo`
+   (viaja pegado a Pegajín): imitaba a un desconocido en vez de abrazar a su amigo.
+   Cambiada a `hug`, y Pegajín conserva `mirror` + `hug`.
+4. **Bubu sólo sabía saltar**: `board` y `exit` eran ambos `hop`, indistinguible de
+   otros tres monstruos, y su reposo `eye` sí era propio. Ahora sale contoneándose
+   (`waddle`) y tiene manía de orejas/ojo.
+5. **El enfriamiento de los bocadillos se medía mal.** `BubbleDirector` marcaba al
+   hablante cuando el globo APARECÍA, no cuando desaparecía: con un `ttl` de 2 s y
+   enfriamiento de 2,2 s el personaje sólo callaba 0,2 s reales (5 frases por
+   minuto). Ahora el reloj arranca al ocultarse el globo.
+6. **La interrupción por prioridad exigía +2 escalones.** Un aviso de piso
+   equivocado (`error`, 5) sobre una conversación tranquila (`chat`, 0) sí
+   interrumpía, pero una regla social (`rule`, 4) sobre una frase de espera
+   (`idle`, 1) no: el globo urgente se quedaba esperando detrás de una frase
+   decorativa. Bajado a +1 escalón.
+7. **13 voces tenían menos frases de llegada de las que pedía el encargo** y 6 no
+   tenían frases de bloqueo propias (caían en la reserva genérica por categoría, que
+   es justo lo que el Sprint 2 quiere evitar). Se han escrito 49 frases nuevas a
+   mano, una por una con la manía y el habla de cada personaje.
+8. **`{d}` aparecía en 12 frases de contextos sin destino** (error, bloqueo,
+   encuentro, dúo). Sin destino el token se sustituía por vacío y se leía «¡Al ,
+   por favor!» o «Piso , ¿no?». Se han reescrito las 12 y se ha añadido
+   `sinDestino()` como red: filtra las frases con `{d}` de las reservas genéricas
+   de `dialogues.ts`, que sí lo llevan.
+9. **`RULE_HINTS` tenía dos claves inventadas** (`coupleTogether`, `twinsTogether`)
+   que no existen en `BlockReason`, y le faltaba `enemyOnboard`. Ahora el mapa está
+   tipado `Record<BlockReason, string>`: si el solver añade una razón de bloqueo,
+   deja de compilar hasta que se escriba su aviso.
+10. **`enemiesOf` se duplicó al añadir `duoOf`** (el campo ya existía en el motor).
+    Detectado por `tsc` antes de commitear.
+11. **`thud()` (el pisotón del gigante) sonaba a volumen 0,30**, el doble que el
+    techo declarado para los sonidos de personaje. Bajado a 0,16.
+
+### Lo que NO se ha podido comprobar (honestidad)
+
+- **No se ha abierto el juego en un navegador**: sigue sin haber navegador en este
+  entorno (ni Playwright ni jsdom). Todo lo anterior sale de ejecutar los módulos
+  puros en Node, de leer el código de `GameScene.ts`/`BootScene.ts` y de medir el
+  coste de cálculo. **La apariencia real —si las caras de parpadeo se ven bien, si
+  dos filas de monstruos resultan agradables, si los globos molestan— no está
+  verificada.** Es lo primero que hay que mirar al abrir el juego.
+- Los 10 µs por fotograma son sólo la lógica nueva (fórmulas, temporizadores y
+  directores). **No incluyen el coste de dibujo de Phaser** (90 texturas en memoria
+  de GPU, ~20 contenedores con sus hijos, las partículas). Ese coste no se puede
+  medir sin navegador; lo que sí está acotado por diseño es el número de objetos:
+  un bocadillo, ≤24 partículas vivas, una reacción cada 900 ms.
+- El `fitScale` del peor caso (20 monstruos, 0,685) es teórico: **ningún nivel trae
+  más de 10 pasajeros**, así que en la campaña real `fitScale` vale 1 y nadie se
+  encoge. Se comprueba que la cola de los 30 niveles cabe sin ajuste y sin solapes.
+- Las pruebas de integración leen el fuente como texto (`?raw`) para comprobar que
+  `GameScene` usa los sistemas nuevos y que nada prohibido aparece donde no debe.
+  **Eso verifica que el código está, no que se ejecute bien**: un `playMotion` mal
+  escrito pasaría estas pruebas y se vería mal en pantalla.
+- No se ha tocado ni medido el `sw.js` ni el manifiesto: el bundle creció de 1,88 MB
+  a 1,93 MB (1 929 621 bytes; gzip 460,89 kB) y sigue sin code-splitting (aviso de
+  Vite incluido). Las 30 texturas de cara nuevas (~0,5 MB de memoria de texturas)
+  no pesan en el bundle: se generan en el arranque, no se descargan.
+
+### Restricciones del encargo respetadas
+
+No se han creado monstruos nuevos (siguen siendo 20), no se ha tocado la economía
+ni los precios (`FIRST_WIN` 20, `PER_STAR` 5, `OPTIMAL` 10, `CHALLENGE_BADGE` 25),
+no se ha añadido publicidad, no se han cambiado las reglas del solver ni los 30
+niveles ni los cronómetros, no se ha eliminado contenido existente (las frases
+genéricas de `dialogues.ts` siguen ahí como reserva), el guardado
+`piso-equivocado-save-v1` no cambia de formato y las etiquetas de recuperación
+anteriores siguen en el repositorio.

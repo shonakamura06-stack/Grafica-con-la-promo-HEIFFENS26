@@ -6,11 +6,13 @@
  * cada uno tiene silueta, accesorios y personalidad propios (antenas de
  * estrella, rayo en la panza, gorro de fiesta, alas, lunares…). No se
  * copia ni se traza ninguna imagen de referencia.
- * Cada monstruo se dibuja en 3 ánimos: feliz, neutral y enojado.
+ * Cada monstruo se dibuja en 3 ánimos: feliz, neutral y enojado, más las
+ * variantes de cara del Sprint 2 (parpadeo y mirada) que anima la expresión.
  */
 
 import Phaser from 'phaser';
 import { MONSTERS, Mood } from '../data/monsters';
+import { BLINK_IDS, GAZE_IDS } from '../systems/personality';
 
 const T = 128; // tamaño de textura de monstruo
 const C = T / 2;
@@ -18,13 +20,30 @@ const OUT = 0x3f2a1a; // contorno grueso oscuro estilo caricatura
 
 type G = Phaser.GameObjects.Graphics;
 
+/**
+ * Estado de la cara que se está dibujando. Se activa SOLO mientras BootScene genera
+ * las texturas de variante (`monster-<id>-blink`, `-look-l`, `-look-r`): durante la
+ * partida nunca cambia, así que no se recrea ninguna textura en caliente.
+ */
+let BLINK = false;
+let GAZE = 0;   // -1 mira a su derecha, 0 al frente, +1 a su izquierda
+
 function eye(g: G, x: number, y: number, r: number, pupilR: number, lookY = 0): void {
   g.fillStyle(0xffffff, 1);
   g.fillCircle(x, y, r);
+  if (BLINK) {
+    // Párpado cerrado: una curva fina en el centro del ojo.
+    g.lineStyle(Math.max(3, pupilR * 0.95), 0x241640, 1);
+    g.beginPath();
+    g.arc(x, y + r * 0.08, r * 0.68, Math.PI * 0.16, Math.PI * 0.84, false);
+    g.strokePath();
+    return;
+  }
+  const px = x + GAZE * r * 0.34;
   g.fillStyle(0x241640, 1);
-  g.fillCircle(x, y + lookY, pupilR);
+  g.fillCircle(px, y + lookY, pupilR);
   g.fillStyle(0xffffff, 1);
-  g.fillCircle(x + pupilR * 0.35, y + lookY - pupilR * 0.35, pupilR * 0.4);
+  g.fillCircle(px + pupilR * 0.35, y + lookY - pupilR * 0.35, pupilR * 0.4);
 }
 
 /** Boca según el ánimo: sonrisa, línea neutra o ceño fruncido. */
@@ -436,9 +455,16 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillStyle(0xffffff, 1);
     g.fillCircle(C - 12, 68, 12);
     g.fillCircle(C + 12, 68, 12);
-    g.fillStyle(0x1e1b4b, 1);
-    g.fillCircle(C - 12, 71, 6);
-    g.fillCircle(C + 12, 71, 6);
+    if (BLINK) {
+      // Ojos de búho dormido: dos párpados pesados.
+      g.lineStyle(4, 0x1e1b4b, 1);
+      g.beginPath(); g.arc(C - 12, 68, 9, Math.PI * 0.15, Math.PI * 0.85, false); g.strokePath();
+      g.beginPath(); g.arc(C + 12, 68, 9, Math.PI * 0.15, Math.PI * 0.85, false); g.strokePath();
+    } else {
+      g.fillStyle(0x1e1b4b, 1);
+      g.fillCircle(C - 12 + GAZE * 4, 71, 6);
+      g.fillCircle(C + 12 + GAZE * 4, 71, 6);
+    }
     g.fillStyle(0xc7d2fe, 1);
     g.fillRect(C - 25, 56, 26, 8);
     g.fillRect(C - 1, 56, 26, 8);
@@ -463,9 +489,19 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillCircle(C, 98, 10);
     g.fillCircle(C + 24, 96, 10);
     outlineCircle(g, C, 62, 36);
-    g.lineStyle(4, 0x94a3b8, 1);
-    g.beginPath(); g.arc(C - 13, 62, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
-    g.beginPath(); g.arc(C + 13, 62, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
+    if (BLINK) {
+      // Su "parpadeo" es abrir los ojos de golpe: siempre está sorprendido.
+      g.fillStyle(0x334155, 1);
+      g.fillCircle(C - 13, 62, 6.5);
+      g.fillCircle(C + 13, 62, 6.5);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(C - 11, 60, 2.2);
+      g.fillCircle(C + 15, 60, 2.2);
+    } else {
+      g.lineStyle(4, 0x94a3b8, 1);
+      g.beginPath(); g.arc(C - 13, 62, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
+      g.beginPath(); g.arc(C + 13, 62, 8, Math.PI * 1.05, Math.PI * 1.95, false); g.strokePath();
+    }
     if (mood === 'angry') angryBrows(g, C, 62, 13);
     if (mood === 'happy') {
       g.fillStyle(0x64748b, 1);
@@ -582,13 +618,19 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
     g.fillTriangle(C - 36, 18, C - 24, 18, C - 30, 28);
     g.fillTriangle(C + 24, 18, C + 36, 18, C + 30, 28);
     // Ojos de corazón
-    g.fillStyle(0xef4444, 1);
-    g.fillCircle(C - 14, 58, 6);
-    g.fillCircle(C - 9, 55, 4);
-    g.fillCircle(C + 14, 58, 6);
-    g.fillCircle(C + 9, 55, 4);
-    g.fillTriangle(C - 20, 60, C - 8, 60, C - 14, 70);
-    g.fillTriangle(C + 8, 60, C + 20, 60, C + 14, 70);
+    if (BLINK) {
+      g.lineStyle(4, 0x9f1239, 1);
+      g.beginPath(); g.arc(C - 14, 58, 7, Math.PI * 1.1, Math.PI * 1.9, false); g.strokePath();
+      g.beginPath(); g.arc(C + 14, 58, 7, Math.PI * 1.1, Math.PI * 1.9, false); g.strokePath();
+    } else {
+      g.fillStyle(0xef4444, 1);
+      g.fillCircle(C - 14, 58, 6);
+      g.fillCircle(C - 9, 55, 4);
+      g.fillCircle(C + 14, 58, 6);
+      g.fillCircle(C + 9, 55, 4);
+      g.fillTriangle(C - 20, 60, C - 8, 60, C - 14, 70);
+      g.fillTriangle(C + 8, 60, C + 20, 60, C + 14, 70);
+    }
     if (mood === 'angry') angryBrows(g, C, 58, 14);
     mouth(g, mood, C, 78, 12, 0x9f1239);
     cheeks(g, C, 80, 28);
@@ -720,6 +762,23 @@ export default class BootScene extends Phaser.Scene {
         g.generateTexture(key, T, T);
         g.destroy();
       }
+    }
+
+    // Variantes de cara (Sprint 2): parpadeo y mirada. Se generan AQUÍ, una sola
+    // vez y sobre el ánimo feliz (el que se ve casi siempre); en partida solo se
+    // cambia la textura, nunca se vuelve a dibujar.
+    const variante = (id: string, sufijo: string, blink: boolean, gaze: number): void => {
+      BLINK = blink; GAZE = gaze;
+      const g = this.add.graphics();
+      DRAWERS[id](g, 'happy');
+      g.generateTexture(`monster-${id}-${sufijo}`, T, T);
+      g.destroy();
+      BLINK = false; GAZE = 0;
+    };
+    for (const id of BLINK_IDS) variante(id, 'blink', true, 0);
+    for (const id of GAZE_IDS) {
+      variante(id, 'look-l', false, -1);
+      variante(id, 'look-r', false, 1);
     }
 
   // Nube con carita (decoración del cielo)

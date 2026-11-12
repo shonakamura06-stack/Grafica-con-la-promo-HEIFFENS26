@@ -128,6 +128,60 @@ class AudioEngine {
     this.sweep(260, 150, 0.35, 'square', 0.18, 0.15);
   }
 
+  // ── Sonidos característicos de cada monstruo (Sprint 2) ───────────────────
+  // Todos son breves (<0,4 s) y flojos (vol <= 0,16): son RASGOS de personaje que
+  // suenan de vez en cuando, no efectos de acción. Se disparan con enfriamiento
+  // global (FX_LIMITS.sfxEveryMs) para que la cola no sea un gallinero.
+  /** Pisotón grave del gigante. */
+  thud(): void { this.sweep(120, 62, 0.2, 'sine', 0.16); this.tone(90, 0.09, 'triangle', 0.14, 0.02); }
+  /** Aire atravesado por el fantasma. */
+  whoosh(): void { this.sweep(880, 210, 0.28, 'sine', 0.11); this.sweep(240, 700, 0.2, 'sine', 0.06, 0.1); }
+  /** Ronquido de búho dormido. */
+  snore(): void { this.sweep(84, 142, 0.22, 'sawtooth', 0.1); this.sweep(142, 86, 0.2, 'sawtooth', 0.07, 0.21); }
+  /** Doble pitido de los gemelos (uno detrás del otro). */
+  twinBlip(): void { this.tone(660, 0.06, 'triangle', 0.16); this.tone(880, 0.07, 'triangle', 0.15, 0.09); }
+  /** Susurro casi inaudible del tímido. */
+  whisper(): void { this.sweep(1400, 900, 0.22, 'sine', 0.05); }
+  /** Chispas nerviosas. */
+  sparkle(): void { [1568, 2093, 2637].forEach((f, i) => this.tone(f, 0.05, 'sine', 0.11, i * 0.045)); }
+  /** Gelatina que se despega. */
+  slime(): void { this.sweep(300, 118, 0.18, 'sine', 0.15); this.tone(176, 0.09, 'sine', 0.1, 0.16); }
+  /** Pompas de agua. */
+  bubblePop(): void { this.tone(500, 0.05, 'sine', 0.13); this.sweep(700, 1200, 0.07, 'sine', 0.1, 0.06); }
+  /** Ronroneo de nube. */
+  purr(): void { [0, 1, 2].forEach((i) => this.tone(118 + i * 6, 0.07, 'triangle', 0.09, i * 0.085)); }
+  /** Aleteo de capa. */
+  cape(): void { this.sweep(420, 150, 0.2, 'triangle', 0.08); }
+  /** Orejas que se estiran. */
+  earTwitch(): void { this.tone(1200, 0.04, 'triangle', 0.1); this.tone(900, 0.04, 'triangle', 0.08, 0.06); }
+  /** Obturador de la cámara del turista. */
+  camera(): void { this.tone(2000, 0.02, 'square', 0.11); this.tone(1400, 0.03, 'square', 0.09, 0.05); }
+  /** Chasquido metálico de las maletas. */
+  cling(): void { this.tone(1800, 0.08, 'square', 0.06); this.tone(2400, 0.06, 'square', 0.045, 0.02); }
+  /** Latido suave del enamorado. */
+  heartSfx(): void { this.tone(784, 0.12, 'sine', 0.13); this.tone(1046, 0.14, 'sine', 0.11, 0.13); }
+  /** Bufido del gruñón. */
+  grumble(): void { this.sweep(152, 88, 0.28, 'sawtooth', 0.12); }
+  /** Temblor del miedoso. */
+  tremble(): void { [0, 1, 2, 3].forEach((i) => this.tone(i % 2 ? 182 : 206, 0.04, 'square', 0.07, i * 0.05)); }
+  /** Ojo único que gira curioso. */
+  eyeSpin(): void { this.sweep(900, 1420, 0.12, 'sine', 0.08); }
+  /** Se recoloca presumido (VIP). */
+  pose(): void { this.tone(880, 0.06, 'triangle', 0.08); this.tone(1320, 0.08, 'triangle', 0.06, 0.07); }
+
+  /**
+   * Dispara el sonido característico por clave. Devuelve `false` si el sonido está
+   * desactivado o la clave no existe, para que la escena no cuente enfriamientos en
+   * balde.
+   */
+  signature(key?: string): boolean {
+    if (!key || !this.soundEnabled || !this.ctx) return false;
+    const fn = (this as unknown as Record<string, unknown>)[key];
+    if (typeof fn !== 'function') return false;
+    (fn as () => void).call(this);
+    return true;
+  }
+
   // ── Música ambiental (bucle original) ────────────────────────────────────
   startMusic(): void {
     this.ensure();

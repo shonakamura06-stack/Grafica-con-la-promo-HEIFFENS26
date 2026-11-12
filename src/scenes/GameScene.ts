@@ -22,8 +22,20 @@ import { getLevel, LEVELS, LevelDef, TOTAL_LEVELS } from '../data/levels';
 import { MONSTER_MAP, MonsterDef, Mood, floorColor } from '../data/monsters';
 import { loadSave, writeSave, SaveData } from '../systems/save';
 import { computeOptimal, starsFor, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
-import { buildCrew, canBoard, canExit, CrewMember } from '../systems/rules';
-import { queueLine, arrivalLine, pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTIONIST_LINES } from '../data/dialogues';
+import { buildCrew, canBoard, canExit, CrewMember, BlockReason } from '../systems/rules';
+import { pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTIONIST_LINES } from '../data/dialogues';
+import { queueLineFor, arriveLineFor, errorLineFor, blockedLineFor, duoLineFor, meetLineFor } from '../data/voices';
+import {
+  personalityOf, idlePhase, hasBlink, hasGaze, FX_LIMITS, MIRROR_DELAY,
+  Personality, Quirk, MotionStyle,
+} from '../systems/personality';
+import {
+  idleFrame, faceTexture, EventTimer, MOTION_PRESETS, REACTION_PRESETS,
+  TweenSpec, ReactionKind, FaceState, STILL, presetDuration,
+} from '../systems/animator';
+import { layoutQueue as computeQueueLayout, QUEUE_AREA, QueueSlot } from '../systems/queueLayout';
+import { BubbleDirector, PRIORITY, Anchor, BubblePriority } from '../systems/bubbles';
+import { InteractionDirector, ActorSnapshot, InteractionEvent } from '../systems/interactions';
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
 import { RESE_VOICE } from '../data/reseVoice';
@@ -52,8 +64,52 @@ interface Passenger {
   container: Phaser.GameObjects.Container;
   image: Phaser.GameObjects.Image;
   badge: Phaser.GameObjects.Container;
-  bobTween?: Phaser.Tweens.Tween;
+  /** Escala base del sprite en su sitio actual (cola o cabina): el reposo multiplica sobre ella. */
+  baseScale: number;
+  /** Tamaño real del sprite en la cola, para la geometría y los bocadillos. */
+  w: number;
+  h: number;
+  // ── Personalidad (Sprint 2) ────────────────────────────────────────────────
+  pers: Personality;
+  /** Fase propia del reposo: nadie se mueve a la vez que su vecino. */
+  phase: number;
+  blinkTimer: EventTimer;
+  gazeTimer: EventTimer;
+  sfxTimer: EventTimer;
+  /** Cara actual y hasta cuándo se mantiene (parpadeo/mirada). */
+  face: FaceState;
+  faceUntil: number;
+  /** Fila de la cola (0 atrás, 1 delante) y profundidad de dibujo. */
+  row: number;
+  /** Manías visuales que pueden dispararse solas. */
+  quirks: Quirk[];
+  /** Último momento en que habló (para repartir los turnos de bocadillo). */
+  lastSpeak: number;
+  /** Hasta cuándo una animación puntual tiene el sprite (el reposo espera). */
+  busyUntil: number;
 }
+
+/** Ancho/alto de la textura de un monstruo (todas son cuadradas de 128 px). */
+const MONSTER_TEXTURE = 128;
+
+/**
+ * Lo que dice el SISTEMA cuando una regla bloquea la subida. Son los mismos avisos
+ * de siempre (no se cambia ninguna regla del solver): ahora entran por el director de
+ * bocadillos con prioridad `rule`, así no se pisan con las quejas de los personajes.
+ */
+/**
+ * Tipado sobre `BlockReason` a propósito: si el solver añade o renombra una razón de
+ * bloqueo, este mapa deja de compilar y hay que escribirle el aviso. Así no puede
+ * quedarse una regla nueva sin explicación en pantalla.
+ */
+const RULE_HINTS: Record<BlockReason, string> = {
+  shyInside: 'Sombrín quiere viajar solo',
+  shyWaiting: 'Sombrín quiere viajar solo',
+  fear: 'Temblorín se asusta: máximo 2 en la cabina',
+  partnerSpace: '¡El dúo necesita 2 lugares libres!',
+  full: '¡Ascensor lleno!',
+  enemyOnboard: 'Esos dos se odian: mejor por separado',
+};
 
 const W = 540;
 const H = 960;
@@ -73,6 +129,46 @@ const SHAFT_LEFT = 284;
 const SHAFT_RIGHT = 390;
 const PANEL_X = 470; // centro de la columna 4
 const QUEUE_CX = 135; // centro de la zona de cola (columnas 1-2)
+
+/** Animación corta de cada manía (reutiliza los presets declarativos del animador). */
+const QUIRK_MOTION: Record<Quirk, TweenSpec[]> = {
+  hearts: MOTION_PRESETS.hop,      glare: MOTION_PRESETS.dash,
+  hide: MOTION_PRESETS.squeeze,    mirror: MOTION_PRESETS.waddle,
+  stomp: MOTION_PRESETS.stomp,     phase: MOTION_PRESETS.glide,
+  snore: MOTION_PRESETS.float,     tremble: MOTION_PRESETS.squeeze,
+  photo: MOTION_PRESETS.spin,      bubbles: MOTION_PRESETS.float,
+  ears: MOTION_PRESETS.waddle,     stretch: MOTION_PRESETS.squeeze,
+  fan: MOTION_PRESETS.glide,       hug: MOTION_PRESETS.hop,
+};
+/** Sonido de cada manía (clave de systems/audio.ts; `signature()` ignora las inexistentes). */
+const QUIRK_SFX: Record<Quirk, string> = {
+  hearts: 'heartSfx', glare: 'grumble', hide: 'whisper', mirror: 'twinBlip',
+  stomp: 'thud', phase: 'whoosh', snore: 'snore', tremble: 'tremble',
+  photo: 'camera', bubbles: 'bubblePop', ears: 'earTwitch', stretch: 'boing',
+  fan: 'whoosh', hug: 'slime',
+};
+/** Partícula de cada manía: [textura existente, cuántas]. `null` = ninguna (más barato). */
+const QUIRK_FX: Record<Quirk, [string, number] | null> = {
+  hearts: ['heart', 4], glare: ['sparkle', 5], hide: null, mirror: null,
+  stomp: ['sparkle', 4], phase: ['sparkle', 3], snore: null, tremble: null,
+  photo: ['sparkle', 5], bubbles: ['cloud', 2], ears: null, stretch: null,
+  fan: null, hug: ['heart', 3],
+};
+/** Id del "hablante" Rese en el director de bocadillos (no es un pasajero). */
+const RESE_SPEAKER = -2;
+
+/** Situaciones que Rese comenta UNA vez por nivel. */
+type ReseSituation =
+  | 'coupleTogether'   // una pareja se entrega en el mismo viaje
+  | 'angry'            // un monstruo se enfada (enemigos o piso equivocado)
+  | 'sleeping'         // Nocti se queda dormido dentro
+  | 'breakdown'        // avería
+  | 'repaired'         // avería resuelta
+  | 'levelClear'       // nivel completado
+  | 'giant'            // el gigante hace temblar el suelo
+  | 'ghost';           // el fantasma atraviesa la cola
+/** Rese habla desde el mostrador de recepción: sus globos van ahí, no a la cabina. */
+const RESE_ANCHOR: Anchor = { x: 104, y: 706, w: 96, h: 96 };
 
 export default class GameScene extends Phaser.Scene {
   private level!: LevelDef;
@@ -121,6 +217,7 @@ export default class GameScene extends Phaser.Scene {
   private ruleBreaks = 0;          // reglas rotas (enemigos juntos, etc.)
   private coupleOf = new Map<number, number>(); // pasajero -> su pareja
   private enemiesOf = new Map<number, number[]>(); // pasajero -> enemigos
+  private duoOf = new Map<number, number>();     // pasajero -> su compañero de dúo
   private breakdownDone = false;   // ya ocurrió la avería en este nivel
   private repairing = false;       // minijuego de reparación abierto
   private teaching = false;        // hay una tarjeta/ficha en pantalla: el reloj espera
@@ -142,6 +239,17 @@ export default class GameScene extends Phaser.Scene {
   private reseHint!: Phaser.GameObjects.Text;
   private useHearts = false;       // este nivel usa corazones globales
   private dialogLines: string[] = [];
+  // ── Sprint 2: personalidad, bocadillos y reacciones ───────────────────────
+  private bubbles = new BubbleDirector();
+  private interactions = new InteractionDirector();
+  private liveParticles = 0;
+  private sceneVisible = true;
+  private lastSfx = -Infinity;
+  private systemAnchor: Anchor = { x: CAB_X, y: 300, w: CAB_W, h: CAB_H };
+  private animClock = 0;
+  private queueRows = 1;
+  private queueFit = 1;
+  private reseSeen = new Set<ReseSituation>();
   private shyExplained = false;  // Rese ya explicó cómo tratar al tímido
   private fearExplained = false; // Rese ya explicó al miedoso
   private guidedStage = -1;      // -1 esperando, 0 flecha, 1 botón, 2 libre
@@ -195,6 +303,7 @@ export default class GameScene extends Phaser.Scene {
     this.reseActive = false;
     this.coupleOf.clear();
     this.enemiesOf.clear();
+    this.duoOf.clear();
     this.breakdownDone = false;
     this.repairing = false;
     this.teaching = false;
@@ -269,20 +378,23 @@ export default class GameScene extends Phaser.Scene {
     this.startSpeech();
     this.maybeBreakdown();
 
-    // Parpadeos aleatorios de los monstruos en cola
-    this.time.addEvent({
-      delay: 2300, loop: true,
-      callback: () => {
-        const waiting = this.passengers.filter((p) => p.state === 'queue');
-        if (waiting.length === 0) return;
-        const p = waiting[Math.floor(Math.random() * waiting.length)];
-        const s = this.queueScale(p);
-        this.tweens.add({ targets: p.image, scaleY: s * 0.8, duration: 80, yoyo: true });
-      },
-    });
+    // Los parpadeos ya no van con un temporizador global: cada monstruo tiene el
+    // suyo (systems/animator.ts) con su propio ritmo y su propia textura de ojos
+    // cerrados. Ver `animateCast()`.
+
+    // Escena oculta: se para TODO el trabajo visual (reposo, bocadillos, reacciones).
+    this.events.on(Phaser.Scenes.Events.PAUSE, () => { this.sceneVisible = false; });
+    this.events.on(Phaser.Scenes.Events.RESUME, () => { this.sceneVisible = true; });
+    this.events.on(Phaser.Scenes.Events.SLEEP, () => { this.sceneVisible = false; });
+    this.events.on(Phaser.Scenes.Events.WAKE, () => { this.sceneVisible = true; });
 
     // Pausa automática al cambiar de pestaña
     this.onVisibility = () => {
+      this.sceneVisible = !document.hidden;
+      if (document.hidden) {
+        this.bubbles.silence(this.time.now);
+        this.hideBubble();
+      }
       if (document.hidden && !this.won && !this.paused) this.openPause();
     };
     document.addEventListener('visibilitychange', this.onVisibility);
@@ -294,17 +406,81 @@ export default class GameScene extends Phaser.Scene {
   private onVisibility = (): void => {};
 
   /** Mantiene a los pasajeros a bordo pegados a la cabina y dibuja el cable. */
-  update(time: number): void {
+  update(time: number, delta: number): void {
     const onboard = this.onboard();
     onboard.forEach((p, i) => {
       const pos = this.slotPosition(i);
-      const bob = p.def.rule === 'ghost' ? Math.sin(time / 280 + p.id) * 4 : 0;
-      const targetY = p.def.rule === 'ghost' ? -22 + bob : pos.y;
+      const targetY = p.def.rule === 'ghost' ? -22 : pos.y;
       p.container.setPosition(this.cab.x + pos.x, this.cab.y + targetY);
     });
     this.cable.clear();
     this.cable.lineStyle(3, 0x7c4f24, 0.9);
     this.cable.lineBetween(CAB_X, this.buildTop() + 22, this.cab.x, this.cab.y - CAB_H / 2 - 6);
+
+    // Sin escena visible (pestaña en segundo plano, pausa del sistema) no se anima
+    // nada: ni tweens de reposo, ni bocadillos, ni reacciones. Cero trabajo inútil.
+    if (!this.sceneVisible || this.won) return;
+    const nowMs = this.time.now;
+    this.animClock = nowMs / 1000;
+    this.systemAnchor = { x: CAB_X, y: Math.max(150, this.cab.y - 96), w: CAB_W, h: CAB_H };
+    if (!this.paused && !this.reseActive && !this.teaching && !this.repairing) {
+      this.animateCast(time / 1000, nowMs);
+      this.updateInteractions(nowMs);
+    }
+    this.updateBubbles(nowMs);
+  }
+
+  /**
+   * REPOSO DE TODO EL REPARTO en una sola pasada por fotograma.
+   *
+   * Antes cada pasajero tenía su propio tween infinito de flote más un temporizador
+   * global de parpadeos: 10 pasajeros eran 10 tweens repitiéndose para siempre. Ahora
+   * el movimiento sale de `idleFrame()` (una fórmula) y sólo hay tweens para las
+   * animaciones puntuales (entrar, salir, reaccionar), que duran menos de un segundo.
+   */
+  private animateCast(t: number, nowMs: number): void {
+    const now = nowMs / 1000;
+    for (const p of this.passengers) {
+      if (p.state === 'boarding' || p.state === 'exiting' || p.state === 'delivered') continue;
+      if (!p.container.active) continue;
+      const enCab = p.state === 'onboard';
+
+      // ── cara: parpadeo y mirada con texturas ya generadas ──
+      if (p.face === 'open') {
+        if (hasBlink(p.monsterId) && p.blinkTimer.due(now)) {
+          p.face = 'blink'; p.faceUntil = nowMs + 130; p.blinkTimer.reset(now);
+        } else if (hasGaze(p.monsterId) && p.gazeTimer.due(now)) {
+          p.face = Math.random() < 0.5 ? 'left' : 'right';
+          p.faceUntil = nowMs + 520; p.gazeTimer.reset(now);
+        }
+      } else if (nowMs >= p.faceUntil) {
+        p.face = 'open';
+      }
+      this.applyFace(p, nowMs);
+
+      // ── sonido característico, con enfriamiento global para no saturar ──
+      if (p.pers.sfx && p.sfxTimer.due(now)) {
+        if (nowMs - this.lastSfx >= FX_LIMITS.sfxEveryMs && audio.signature(p.pers.sfx)) {
+          this.lastSfx = nowMs;
+          p.sfxTimer.reset(now);
+        } else {
+          p.sfxTimer.postpone(now, 1.2);
+        }
+      }
+
+      // ── reposo: una fórmula, no un tween ──
+      if (nowMs < p.busyUntil) continue;         // una animación puntual manda ahora
+      const amp = enCab ? p.pers.amp * 0.45 : p.pers.amp;
+      // Los gemelos y los dúos se imitan con un retardo: misma onda, fase desplazada.
+      const lag = p.pers.idle === 'mirror' ? MIRROR_DELAY * p.pers.speed * Math.PI * 2 : 0;
+      const f = enCab && p.def.rule === 'ghost'
+        ? STILL                                   // el fantasma ya flota con su deriva
+        : idleFrame(p.pers.idle, t, p.phase, amp, p.pers.speed, lag);
+      p.image.setPosition(f.dx, f.dy);
+      p.image.setScale(p.baseScale * f.sx, p.baseScale * f.sy);
+      p.image.setAngle(f.angle);
+      if (enCab && p.def.rule === 'ghost') p.image.setAlpha(0.86 + Math.sin(t * 1.4 + p.phase) * 0.08);
+    }
   }
 
   // ── Cielo y nubes ────────────────────────────────────────────────────────
@@ -560,7 +736,7 @@ export default class GameScene extends Phaser.Scene {
         this.refreshTimerBar();
         if (this.timeLeft === 10) {
           audio.tension();
-          this.showBubble('¡Solo quedan 10 segundos!', CAB_X, 200, 1800);
+          this.say('¡Solo quedan 10 segundos!', { priority: PRIORITY.error, ttl: 1800 });
         }
         if (this.timeLeft <= 0) this.timeOut();
       },
@@ -601,7 +777,7 @@ export default class GameScene extends Phaser.Scene {
     if (this.lives <= 0) {
       this.challengeOver(reason);
     } else {
-      this.showBubble(`${reason} Te quedan ${this.lives} vidas en este desafío.`, CAB_X, 300, 2200);
+      this.say(`${reason} Te quedan ${this.lives} vidas en este desafío.`, { priority: PRIORITY.error, ttl: 2200 });
     }
   }
 
@@ -817,8 +993,10 @@ export default class GameScene extends Phaser.Scene {
     this.crew = buildCrew(this.level);
     this.coupleOf.clear();
     this.enemiesOf.clear();
+    this.duoOf.clear();
     for (const m of this.crew) {
       if (m.coupleId >= 0) this.coupleOf.set(m.id, m.coupleId);
+      if (m.partnerId >= 0) this.duoOf.set(m.id, m.partnerId);
       if (m.enemyIds.length > 0) this.enemiesOf.set(m.id, m.enemyIds.slice());
     }
 
@@ -862,9 +1040,19 @@ export default class GameScene extends Phaser.Scene {
         container.add(bolt);
       }
 
+      const pers = personalityOf(grp.monsterId);
+      const escala = this.queueScale({ def } as Passenger);
+      const rnd = () => Math.random();
       const pax: Passenger = {
         id: i, monsterId: grp.monsterId, def, dest: grp.dest, slots: grp.slots,
         state: 'queue', asleep: false, mood: 'happy', container, image, badge,
+        baseScale: escala, w: MONSTER_TEXTURE * escala, h: MONSTER_TEXTURE * escala,
+        pers, phase: idlePhase(i, grp.monsterId),
+        blinkTimer: new EventTimer(pers.blink[0], pers.blink[1], 0, rnd),
+        gazeTimer: new EventTimer(pers.gaze[0], pers.gaze[1], 0, rnd),
+        sfxTimer: new EventTimer(pers.sfxEvery ?? 30, (pers.sfxEvery ?? 30) * 1.6, 0, rnd),
+        face: 'open', faceUntil: 0, row: 0,
+        quirks: pers.quirks, lastSpeak: -Infinity, busyUntil: 0,
       };
       image.on('pointerdown', () => this.onPassengerTap(pax));
       this.passengers.push(pax);
@@ -873,43 +1061,64 @@ export default class GameScene extends Phaser.Scene {
 
   private setMood(p: Passenger, mood: Mood): void {
     p.mood = mood;
-    p.image.setTexture(mood === 'happy' ? `monster-${p.monsterId}` : `monster-${p.monsterId}-${mood}`);
+    this.applyFace(p, this.animClock);
+    // El ánimo también se nota en el cuerpo: enfadado se encoge, triste cae.
+    if (mood === 'angry') this.playReaction(p, 'anger');
   }
 
-  private queuePositions(): Array<{ x: number; y: number }> {
-    const waiting = this.passengers.filter((p) => p.state === 'queue');
-    const n = waiting.length;
-    const rows = n <= 5 ? 1 : 2;
-    const perRow = rows === 1 ? n : Math.ceil(n / 2);
-    const positions: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i < n; i++) {
-      const row = rows === 1 ? 0 : Math.floor(i / perRow);
-      const idxInRow = rows === 1 ? i : i % perRow;
-      const countInRow = rows === 1 ? n : Math.min(perRow, n - row * perRow);
-      const x = W / 2 + (idxInRow - (countInRow - 1) / 2) * 52;
-      const y = rows === 1 ? 872 : 842 + row * 56;
-      positions.push({ x, y });
-    }
-    return positions;
+  /**
+   * Textura de la cara = ánimo + parpadeo/mirada. Única puerta de entrada: así el
+   * animador y `setMood` no se pisan. Solo cambia la clave si hace falta (cambiar
+   * texturas es barato; REGENERARLAS no, y aquí no se regenera nunca).
+   */
+  private applyFace(p: Passenger, now: number): void {
+    const face = now < p.faceUntil ? p.face : 'open';
+    if (face === 'open') { p.face = 'open'; }
+    const variantes = hasBlink(p.monsterId) || hasGaze(p.monsterId);
+    const key = faceTexture(p.monsterId, p.mood, face, variantes);
+    if (p.image.texture.key !== key) p.image.setTexture(key);
   }
 
+  /**
+   * (Eliminado) `queuePositions()` separaba a todo el mundo 52 px fijos aunque el
+   * sprite de Gordito mide 86 px: se solapaban. Ahora la cola se calcula con el
+   * tamaño REAL de cada sprite en systems/queueLayout.ts (una o dos filas, los más
+   * altos delante y colocación por línea de suelo). Ver `layoutQueue()`.
+   */
   private layoutQueue(instant = false): void {
     const waiting = this.passengers.filter((p) => p.state === 'queue');
-    const positions = this.queuePositions();
-    waiting.forEach((p, i) => {
-      const pos = positions[i];
-      if (!pos) return;
-      p.bobTween?.stop();
+    // Geometría real: cada sprite ocupa 128 × escala px (Gordito 86, Maletero 70,
+    // el resto 64). Antes la separación era fija de 52 px y todos se solapaban.
+    const items = waiting.map((p) => ({ id: p.id, w: p.w, h: p.h }));
+    const layout = computeQueueLayout(items, QUEUE_AREA);
+    const huecos = new Map<number, QueueSlot>(layout.slots.map((sl) => [sl.id, sl]));
+    this.queueFit = layout.fitScale;
+    waiting.forEach((p) => {
+      const sl = huecos.get(p.id);
+      if (!sl) return;
+      p.row = sl.row;
+      // Escala real del sprite en su hueco: la del juego × el ajuste de la cola.
+      // El reposo y los bocadillos multiplican sobre ESTA cifra, no sobre la base.
+      p.baseScale = this.queueScale(p) * layout.fitScale;
+      p.w = MONSTER_TEXTURE * p.baseScale;
+      p.h = MONSTER_TEXTURE * p.baseScale;
+      // La fila de delante se dibuja por encima: perspectiva sin solapar cabezas.
+      p.container.setDepth(sl.depth);
+      // La insignia del piso no puede encogerse con el sprite: se quedaría ilegible.
+      const k = 1 / Math.max(0.6, layout.fitScale);
+      p.badge.setScale(Math.min(1.4, k));
       if (instant) {
-        p.container.setPosition(pos.x, pos.y);
+        p.container.setPosition(sl.x, sl.y);
       } else {
-        this.tweens.add({ targets: p.container, x: pos.x, y: pos.y, duration: 300, ease: 'Quad.easeOut' });
+        this.tweens.add({ targets: p.container, x: sl.x, y: sl.y, duration: 300, ease: 'Quad.easeOut' });
       }
-      p.bobTween = this.tweens.add({
-        targets: p.image, y: -4, duration: 700 + Math.random() * 500,
-        yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: Math.random() * 400,
-      });
     });
+    this.queueRows = layout.rows;
+  }
+
+  /** Cuánto mide un sprite en la cola (para bocadillos y efectos). */
+  private anchorOf(p: Passenger): Anchor {
+    return { x: p.container.x, y: p.container.y, w: p.w, h: p.h };
   }
 
   /** Posiciones X de los lugares según capacidad (pads y monstruos coinciden). */
@@ -935,7 +1144,7 @@ export default class GameScene extends Phaser.Scene {
     if (p.state === 'queue') {
       if (this.elevatorFloor !== 0) {
         audio.error();
-        this.showBubble('¡Primero vuelve a recepción!', CAB_X, this.cab.y - 90);
+        this.say('¡Primero vuelve a recepción!', { priority: PRIORITY.rule, ttl: 1500 });
         return;
       }
       if (!this.doorsOpen) return;
@@ -944,16 +1153,18 @@ export default class GameScene extends Phaser.Scene {
       const verdict = canBoard(this.crew, p.id, this.cabIds(), this.level.capacity, 'real', this.queueIds());
       if (!verdict.ok) {
         audio.error();
+        this.reseReact('angry', '¡Esos dos no se soportan! Que no vuelvan a coincidir.');
+        // Dos bocadillos con prioridad distinta: la regla gana el turno y la queja
+        // del personaje se muestra en cuanto queda libre el globo único.
+        this.playReaction(p, 'sad');
+        // El monstruo protesta con SU voz; el sistema recuerda la regla concreta.
+        this.playReaction(p, 'sad');
+        this.say(blockedLineFor(p.monsterId, p.def.kind), { speaker: p, priority: PRIORITY.error, ttl: 1900 });
+        this.say(RULE_HINTS[verdict.reason], { priority: PRIORITY.rule, ttl: 2100 });
         if (verdict.reason === 'shyInside' || verdict.reason === 'shyWaiting') {
-          this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
           if (!this.shyExplained) { this.shyExplained = true; this.reseSay('forg_shy'); }
         } else if (verdict.reason === 'fear') {
-          this.showBubble('Temblorín se asusta: máximo 2 en la cabina', CAB_X, this.cab.y - 90);
           if (!this.fearExplained) { this.fearExplained = true; this.reseSay('forg_fear'); }
-        } else if (verdict.reason === 'partnerSpace') {
-          this.showBubble('¡El dúo necesita 2 lugares libres!', CAB_X, this.cab.y - 90);
-        } else {
-          this.showBubble('¡Ascensor lleno!', CAB_X, this.cab.y - 90);
         }
         return;
       }
@@ -964,9 +1175,12 @@ export default class GameScene extends Phaser.Scene {
         else this.ruleBreaks++;
         audio.error();
         this.setMood(p, 'angry');
-        this.showBubble(pickLine(ENEMY_LINES), p.container.x, p.container.y - 70, 2000);
-        this.showBubble(forgiveNow ? '¡Esos dos se odian! Rese te perdona esta vez' : '¡Esos dos se odian! -1 estrella', CAB_X, this.cab.y - 90, 2000);
-        this.tweens.add({ targets: p.image, x: 4, duration: 60, yoyo: true, repeat: 3 });
+        this.playReaction(p, 'anger');
+        this.say(pickLine(ENEMY_LINES), { speaker: p, priority: PRIORITY.error, ttl: 2000 });
+        this.say(forgiveNow ? '¡Esos dos se odian! Rese te perdona esta vez' : '¡Esos dos se odian! -1 estrella',
+          { priority: PRIORITY.rule, ttl: 2100 });
+        this.puff('sparkle', p.container.x, p.container.y - 46, 5);
+        this.shake(1.6, 90);
         this.time.delayedCall(1500, () => this.setMood(p, 'happy'));
         // No se bloquea: el jugador aprende con la consecuencia.
         if (forgiveNow) this.reseSay('forg_enemy');
@@ -997,12 +1211,22 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Salto con arco hacia la cabina + squash al aterrizar. */
+  /**
+   * Entrada al ascensor con la animación del personaje: Gordito se aprieta, Sombrín
+   * se desliza, Fantasmita atraviesa la puerta, Nocti entra flotando dormido...
+   * La trayectoria y el estado del puzle NO cambian: solo el estilo del movimiento.
+   */
   private board(p: Passenger): void {
     p.state = 'boarding';
-    p.bobTween?.stop();
+    this.tweens.killTweensOf(p.image);
     this.setMood(p, 'happy');
     audio.select();
+    // La escala de referencia pasa a ser la de la cabina: el reposo de a bordo
+    // multiplica sobre ella, así Gordito sigue siendo grande también dentro.
+    p.baseScale = this.cabScale(p);
+    // Cada monstruo entra a su manera: Gordito se aprieta, Fantasmita atraviesa la
+    // puerta, Nocti entra flotando dormido, Chispita sale disparada...
+    this.playMotion(p, p.pers.board);
     const idx = this.passengers.filter((q) => q !== p && (q.state === 'onboard' || q.state === 'boarding')).length;
     const slot = this.slotPosition(idx);
     const targetX = this.cab.x + slot.x;
@@ -1015,7 +1239,7 @@ export default class GameScene extends Phaser.Scene {
       targets: p.container, y: targetY, duration: 230, ease: 'Quad.easeIn', delay: 200,
       onComplete: () => {
         p.state = 'onboard';
-        this.tweens.add({ targets: p.container, scaleY: 0.8, scaleX: 1.15, duration: 90, yoyo: true });
+        p.busyUntil = 0;
         this.refreshHud();
         this.refreshFloorButtons();
         this.updateHint();
@@ -1028,9 +1252,13 @@ export default class GameScene extends Phaser.Scene {
     p.state = 'queue';
     p.asleep = false;
     audio.deselect();
-    p.container.setDepth(10);
     p.badge.setScale(1);
-    this.tweens.add({ targets: p.image, scale: this.queueScale(p), duration: 250 });
+    this.tweens.killTweensOf(p.image);
+    p.baseScale = this.queueScale(p);
+    p.image.setScale(p.baseScale);
+    p.image.setAlpha(1).setAngle(0).setPosition(0, 0);
+    this.setMood(p, p.mood === 'angry' ? 'angry' : 'happy');
+    this.playMotion(p, 'slide');
     this.layoutQueue();
     this.refreshHud();
     this.refreshFloorButtons();
@@ -1044,7 +1272,7 @@ export default class GameScene extends Phaser.Scene {
     const onboard = this.onboard();
     if (onboard.length === 0 && f !== 0) {
       audio.error();
-      this.showBubble('¡Sube monstruos primero!', CAB_X, this.cab.y - 90);
+      this.say('¡Sube monstruos primero!', { priority: PRIORITY.rule, ttl: 1500 });
       return;
     }
     this.travelTo(f);
@@ -1119,6 +1347,7 @@ export default class GameScene extends Phaser.Scene {
       const pid = this.coupleOf.get(p.id);
       if (pid !== undefined && exitIds.has(pid) && p.id < pid && !separated.includes(p)) {
         this.couplesDelivered += 1;
+        this.reseReact('coupleTogether', '¡Los dos a la vez! Así sí se viaja en pareja.');
       }
     }
     if (separated.length > 0) {
@@ -1126,18 +1355,27 @@ export default class GameScene extends Phaser.Scene {
       if (forgiveNow) this.forgiven = true;
       else this.separations++;
       audio.wrong();
-      separated.forEach((p) => {
+      separated.forEach((p, i) => {
         this.setMood(p, 'angry');
-        this.showBubble(pickLine(SEPARATED_LINES, p.dest), p.container.x, p.container.y - 70, 2200);
+        this.playReaction(p, 'anger');
+        // Turno real: el segundo se queja cuando el primero ha terminado.
+        this.time.delayedCall(i * 1900, () => {
+          this.say(pickLine(SEPARATED_LINES, p.dest), { speaker: p, priority: PRIORITY.error, ttl: 2000 });
+        });
       });
-      this.showBubble(forgiveNow ? '¡Separaste una pareja! Rese te perdona esta vez' : '¡Separaste una pareja! -1 estrella', CAB_X, this.cab.y - 90, 2200);
+      this.say(forgiveNow ? '¡Separaste una pareja! Rese te perdona esta vez' : '¡Separaste una pareja! -1 estrella',
+        { priority: PRIORITY.rule, ttl: 2200 });
       if (forgiveNow) this.reseSay('forg_couple');
     }
 
     if (sleepers.length > 0) {
       sleepers.forEach((p) => {
         p.asleep = true;
-        this.showBubble('¡Nocti se durmió! Tócalo para despertarlo', CAB_X, this.cab.y - 90, 2600);
+        this.playReaction(p, 'sleepy');
+        this.setMood(p, 'neutral');
+        audio.snore();
+        this.say('¡Nocti se durmió! Tócalo para despertarlo', { priority: PRIORITY.rule, ttl: 2600 });
+        this.reseReact('sleeping', pickLine(RECEPTIONIST_LINES.mistake).replace(/\.$/, '') + ' Zzz…');
       });
     }
 
@@ -1167,9 +1405,20 @@ export default class GameScene extends Phaser.Scene {
     this.showWrongText();
 
     const mood = moodForMistakes(this.mistakes);
-    this.onboard().forEach((p) => {
+    const dentro = this.onboard();
+    dentro.forEach((p, i) => {
       this.setMood(p, mood);
-      this.tweens.add({ targets: p.image, x: 5, duration: 60, yoyo: true, repeat: 5 });
+      // Cada uno se lo toma a su manera: Sombrín se encoge, Draculín gruñe,
+      // Chispita se impacienta, Fantasmita se desvanece de vergüenza...
+      this.playReaction(p, p.def.rule === 'shy' || p.def.rule === 'fear' ? 'sad' : 'anger');
+      // Y se queja CON SU VOZ, de uno en uno (turnos): antes todos callaban y sólo
+      // salía el cartel de "¡PISO EQUIVOCADO!".
+      if (i < 2) {
+        this.time.delayedCall(i * 1900, () => {
+          if (p.state !== 'onboard') return;
+          this.say(errorLineFor(p.monsterId, p.def.kind), { speaker: p, priority: PRIORITY.error, ttl: 1900 });
+        });
+      }
     });
     this.refreshHud();
 
@@ -1183,7 +1432,8 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.mistakes >= MAX_MISTAKES) {
       this.grumpyReturn = true;
-      this.showBubble('¡Los monstruos están muy molestos! Vuelven a recepción…', CAB_X, this.cab.y - 90, 2400);
+      this.say('¡Los monstruos están muy molestos! Vuelven a recepción…', { priority: PRIORITY.error, ttl: 2400 });
+      this.reseReact('angry', 'Se han cansado de esperar. Vuelven a recepción a calmarse.');
       audio.grumpy();
       this.time.delayedCall(1400, () => {
         if (!this.moving && this.elevatorFloor !== 0) this.travelTo(0);
@@ -1195,7 +1445,7 @@ export default class GameScene extends Phaser.Scene {
   /** Los monstruos molestos se bajan en recepción y vuelven a la cola. */
   private grumpyExit(): void {
     audio.grumpy();
-    this.showBubble('¡Se bajaron molestos! Sube a otros monstruos.', CAB_X, this.cab.y - 90, 2200);
+    this.say('¡Se bajaron molestos! Sube a otros monstruos.', { priority: PRIORITY.error, ttl: 2200 });
     this.onboard().slice().forEach((p, i) => {
       this.time.delayedCall(i * 260, () => {
         this.leaveToQueue(p);
@@ -1215,17 +1465,22 @@ export default class GameScene extends Phaser.Scene {
         'Los demás monstruos ya son tuyos: ¡tú puedes!',
       ]));
     }
+    const dormido = p.asleep;
     p.asleep = false;
     audio.happy();
     p.container.setDepth(20);
     p.badge.setVisible(false);
-    // Mensaje de llegada personalizado según su categoría.
-    const line = arrivalLine(p.def.kind, p.dest);
-    this.showBubble(line, p.container.x, p.container.y - 70, 1800);
+    this.tweens.killTweensOf(p.image);
+    // Voz propia del monstruo (data/voices.ts): la llegada ya no es genérica y el
+    // globo entra por el director con prioridad `arrive` (gana a las frases de espera).
+    const line = arriveLineFor(p.monsterId, p.def.kind, p.dest);
+    this.say(line, { speaker: p, priority: PRIORITY.arrive, ttl: 1800 });
+    // Sale a su manera y con su gesto: Nocti sale aún dormido, Gordito marcando el
+    // paso, Chispita disparada, el enamorado de alegría.
+    this.playMotion(p, p.pers.exit);
+    this.playReaction(p, dormido ? 'sleepy' : 'joy');
     const exitX = p.id % 2 === 0 ? BUILD_LEFT + 58 : BUILD_LEFT + 172;
     const exitY = this.bandBottom(this.elevatorFloor) - 30;
-    this.tweens.add({ targets: p.container, angle: 7, duration: 110, yoyo: true, repeat: 4 });
-    this.tweens.add({ targets: p.container, scaleY: 0.9, duration: 110, yoyo: true, repeat: 4 });
     this.tweens.add({
       targets: p.container, x: exitX, y: exitY, duration: 620, ease: 'Quad.easeOut',
       onComplete: () => {
@@ -1262,8 +1517,12 @@ export default class GameScene extends Phaser.Scene {
   private wakeUp(p: Passenger): void {
     p.asleep = false;
     audio.wake();
-    this.showBubble('¡Despierto!', CAB_X, this.cab.y - 90, 1200);
-    this.tweens.add({ targets: p.image, scale: this.cabScale(p) * 1.2, duration: 150, yoyo: true });
+    this.say('¡Despierto!', { speaker: p, priority: PRIORITY.arrive, ttl: 1200 });
+    // Sobresalto de búho: se estira, abre mucho los ojos y vuelve a su tamaño.
+    this.playReaction(p, 'surprise');
+    p.image.setTexture(hasBlink(p.monsterId) ? `monster-${p.monsterId}-blink` : `monster-${p.monsterId}`);
+    p.face = hasBlink(p.monsterId) ? 'blink' : 'open';
+    p.faceUntil = this.time.now + 420;
     this.time.delayedCall(350, () => {
       if (p.state !== 'onboard') return;
       const v = canExit(this.crew, p.id, this.elevatorFloor, this.cabIds(), true, 'real');
@@ -1342,30 +1601,98 @@ export default class GameScene extends Phaser.Scene {
     const queueCount = this.passengers.filter((p) => p.state === 'queue').length;
     if (this.level.id === 1) {
       if (this.onboard().length === 0 && this.elevatorFloor === 0 && this.delivered === 0) {
-        this.showBubble('¡Púlsalos para que entren!', 270, 600, 5000);
+        this.say('¡Púlsalos para que entren!', { priority: PRIORITY.hint, ttl: 4200 });
       } else if (this.onboard().length > 0 && this.elevatorFloor === 0) {
-        this.showBubble('¡Ahora toca el piso del globo!', 270, 600, 4000);
+        this.say('¡Ahora toca el piso del globo!', { priority: PRIORITY.hint, ttl: 3600 });
       } else if (this.elevatorFloor !== 0 && this.onboard().length > 0) {
-        this.showBubble('¡Buen viaje!', 270, 600, 3000);
+        this.say('¡Buen viaje!', { priority: PRIORITY.hint, ttl: 2600 });
       } else if (this.delivered > 0 && this.onboard().length === 0 && this.elevatorFloor === 0) {
-        this.showBubble('¡Bien! Sube a los demás', 270, 600, 4000);
+        this.say('¡Bien! Sube a los demás', { priority: PRIORITY.hint, ttl: 3600 });
       } else if (this.elevatorFloor !== 0 && this.onboard().length === 0 && queueCount > 0) {
-        this.showBubble('El ascensor no baja solo: ¡toca PISO 0!', 270, 600, 3000);
+        this.say('El ascensor no baja solo: ¡toca PISO 0!', { priority: PRIORITY.hint, ttl: 2600 });
       }
       return;
     }
     if (this.elevatorFloor !== 0 && this.onboard().length === 0 && queueCount > 0) {
-      this.showBubble('El ascensor no baja solo: ¡toca PISO 0!', 270, 600, 3000);
+      this.say('El ascensor no baja solo: ¡toca PISO 0!', { priority: PRIORITY.hint, ttl: 2600 });
     } else if (this.elevatorFloor === 0 && queueCount > 0 && this.onboard().length === 0) {
-      this.showBubble('¡Púlsalos para que entren!', 270, 600, 4000);
+      this.say('¡Púlsalos para que entren!', { priority: PRIORITY.hint, ttl: 3600 });
     } else if (this.onboard().length > 0) {
-      this.showBubble('¡Toca el piso de los globos!', 270, 600, 3000);
+      this.say('¡Toca el piso de los globos!', { priority: PRIORITY.hint, ttl: 2600 });
     }
   }
 
   /** Bocadillo de estrella (estilo cómic) para avisos y pistas. */
-  private showBubble(text: string, x: number, y: number, duration = 1600): void {
+  /**
+   * Pide un bocadillo. Ya NO se dibuja aquí: entra en la cola del `BubbleDirector`
+   * (systems/bubbles.ts), que decide quién habla ahora, dónde se pone el globo —cerca
+   * de quien habla, dentro de la pantalla y sin tapar otras caras— y cuánto dura.
+   *
+   * `x`/`y` siguen en la firma para no reescribir las 18 llamadas existentes, pero el
+   * director los recalcula: dos monstruos ya no pueden "hablar" a la vez (antes el
+   * segundo sobrescribía al primero) y un aviso importante nunca se queda sin salir.
+   */
+  private showBubble(
+    text: string, x: number, y: number, duration = 1600,
+    opts: { speaker?: Passenger | null; priority?: BubblePriority } = {},
+  ): void {
+    void x; void y;
+    this.say(text, { speaker: opts.speaker ?? null, priority: opts.priority ?? PRIORITY.hint, ttl: duration });
+  }
+
+  /** Encola una frase. `speaker` = quién habla (null = mensaje del sistema/ascensor). */
+  private say(
+    text: string,
+    opts: { speaker?: Passenger | null; priority?: BubblePriority; ttl?: number } = {},
+  ): void {
+    if (!text) return;
+    const sp = opts.speaker;
+    if (sp) sp.lastSpeak = this.time.now;
+    this.bubbles.say(sp ? sp.id : -1, text, opts.priority ?? PRIORITY.idle, this.time.now, opts.ttl ?? 1700);
+  }
+
+  /** Comentario corto de Rese SIN abrir su diálogo completo: no pausa el reloj. */
+  private reseQuip(group: keyof typeof RECEPTIONIST_LINES, priority: BubblePriority = PRIORITY.hint): void {
+    const pool = RECEPTIONIST_LINES[group];
+    if (!pool || !pool.length) return;
+    this.bubbles.say(RESE_SPEAKER, pickLine(pool), priority, this.time.now, 2200);
+  }
+
+  /** Aplica lo que decide el director: mostrar u ocultar el globo único. */
+  private updateBubbles(nowMs: number): void {
+    const anchors = new Map<number, Anchor>();
+    anchors.set(-1, this.systemAnchor);
+    anchors.set(RESE_SPEAKER, RESE_ANCHOR);
+    for (const p of this.passengers) {
+      if (p.state === 'delivered' || !p.container.active) continue;
+      anchors.set(p.id, this.anchorOf(p));
+    }
+    for (const ev of this.bubbles.update(nowMs, anchors)) {
+      if (ev.kind === 'show') this.paintBubble(ev.req.text, ev.x, ev.y, ev.req.ttl);
+      else this.hideBubble();
+    }
+  }
+
+  /** Oculta el globo de inmediato (pestaña oculta, pausa, diálogo de Rese, victoria). */
+  private hideBubble(): void {
+    this.bubbleTimer?.remove();
+    this.tweens.killTweensOf(this.bubble);
+    this.bubble.setVisible(false);
+  }
+
+  /** Dibuja el globo único donde y con lo que ha decidido el director. */
+  private paintBubble(text: string, x: number, y: number, duration: number): void {
     this.bubbleText.setText(text);
+    this.drawBubbleShape();
+    this.bubble.setPosition(x, y).setDepth(60).setVisible(true).setAlpha(1).setScale(0.6);
+    this.bubbleText.setPosition(0, 0);
+    this.tweens.add({ targets: this.bubble, scale: 1, duration: 180, ease: 'Back.easeOut' });
+    this.bubbleTimer?.remove();
+    this.bubbleTimer = this.time.delayedCall(Math.max(500, duration), () => this.hideBubble());
+  }
+
+  /** Forma cartoon del globo a partir del texto actual (picos, cola y sombra). */
+  private drawBubbleShape(): void {
     const w = Math.min(320, this.bubbleText.width + 52);
     const h = Math.max(58, this.bubbleText.height + 40);
     this.bubbleBg.clear();
@@ -1404,13 +1731,57 @@ export default class GameScene extends Phaser.Scene {
       new Phaser.Math.Vector2(-w * 0.3, h * 0.44),
       new Phaser.Math.Vector2(0, h * 0.32),
     ], true);
-    this.bubble.setPosition(x, y).setDepth(60).setVisible(true).setAlpha(1).setScale(0.6);
-    this.bubbleText.setPosition(0, 0);
-    this.tweens.add({ targets: this.bubble, scale: 1, duration: 180, ease: 'Back.easeOut' });
-    this.bubbleTimer?.remove();
-    this.bubbleTimer = this.time.delayedCall(duration, () => {
-      this.tweens.add({ targets: this.bubble, alpha: 0, duration: 250, onComplete: () => this.bubble.setVisible(false) });
-    });
+  }
+
+  /**
+   * Aplica una animación puntual declarada (systems/animator.ts) al sprite.
+   *
+   * Las escalas de los presets son MULTIPLICADORES sobre la escala base del monstruo
+   * (0,5 × def.scale en la cola, ~0,3 en la cabina), así el mismo preset sirve para
+   * Gordito y para Bubu. Mientras dura, el reposo de ese pasajero se suspende
+   * (`busyUntil`): nunca hay dos cosas peleándose por el mismo sprite.
+   */
+  private playSpecs(p: Passenger, specs: TweenSpec[]): void {
+    if (!p.container.active || !p.container.scene) return;
+    const base = p.baseScale;
+    p.busyUntil = this.time.now + presetDuration(specs) + 20;
+    this.tweens.killTweensOf(p.image);
+    // Posición de reposo del sprite dentro de su contenedor: los presets se suman a
+    // ella, así la misma animación sirve en la cola (y=0) y dentro de la cabina.
+    const homeX = p.image.x;
+    const homeY = p.image.y;
+    for (const sp of specs) {
+      const cfg: Record<string, unknown> = {
+        targets: p.image, duration: sp.ms, delay: sp.delay ?? 0,
+        ease: sp.ease ?? 'Quad.easeOut', yoyo: sp.yoyo ?? false, repeat: sp.repeat ?? 0,
+      };
+      if (sp.prop === 'scaleX' || sp.prop === 'scaleY') {
+        // El preset habla en múltiplos de la escala base (1 = su tamaño normal).
+        cfg[sp.prop] = sp.to !== undefined ? sp.to * base : (p.image[sp.prop] as number) + (sp.by ?? 0) * base;
+      } else if (sp.prop === 'x') {
+        cfg[sp.prop] = sp.to !== undefined ? homeX + sp.to : homeX + (sp.by ?? 0);
+      } else if (sp.prop === 'y') {
+        cfg[sp.prop] = sp.to !== undefined ? homeY + sp.to : homeY + (sp.by ?? 0);
+      } else if (sp.prop === 'alpha') {
+        // Los fantasmas ya son translúcidos: el preset multiplica su alpha actual.
+        cfg[sp.prop] = sp.to !== undefined
+          ? Math.min(1, p.image.alpha * (sp.to / 0.9))
+          : p.image.alpha + (sp.by ?? 0);
+      } else {
+        cfg[sp.prop] = sp.to !== undefined ? sp.to : (p.image[sp.prop] as number) + (sp.by ?? 0);
+      }
+      this.tweens.add(cfg as unknown as Phaser.Types.Tweens.TweenBuilderConfig);
+    }
+  }
+
+  /** Animación de entrada/salida del ascensor según el personaje. */
+  private playMotion(p: Passenger, style: MotionStyle): void {
+    this.playSpecs(p, MOTION_PRESETS[style] ?? MOTION_PRESETS.hop);
+  }
+
+  /** Reacción emocional (sorpresa, alegría, enfado, tristeza, sueño). */
+  private playReaction(p: Passenger, kind: ReactionKind): void {
+    this.playSpecs(p, REACTION_PRESETS[kind]);
   }
 
   private createBubble(): void {
@@ -1481,6 +1852,10 @@ export default class GameScene extends Phaser.Scene {
 
   private showRuleToast(p: Passenger): void {
     this.teaching = true;
+    // Mientras hay una tarjeta en pantalla nadie más habla: se vacía la cola de
+    // bocadillos y se oculta el globo (si no, tapa la explicación de la regla).
+    for (const ev of this.bubbles.silence(this.time.now)) void ev;
+    this.hideBubble();
     const c = this.add.container(0, 0).setDepth(80);
     const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.4).setOrigin(0).setInteractive();
     c.add(dim);
@@ -1501,6 +1876,8 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Pausa y victoria ─────────────────────────────────────────────────────
   private openPause(): void {
+    this.bubbles.silence(this.time.now);
+    this.hideBubble();
     if (this.paused || this.won) return;
     this.paused = true;
     const c = this.add.container(0, 0).setDepth(90);
@@ -1555,12 +1932,15 @@ export default class GameScene extends Phaser.Scene {
     this.repairing = true;
     audio.breakdown();
     this.cameras.main.shake(200, 0.005);
-    this.showBubble('¡El ascensor se averió! ¡Hay que repararlo!', CAB_X, 300, 2600);
+    this.say('¡El ascensor se averió! ¡Hay que repararlo!', { priority: PRIORITY.error, ttl: 2600 });
+    this.reseReact('breakdown', '¡Se ha parado! Tranquilo: con los tres engranajes vuelve a ir.');
     this.time.delayedCall(1200, () => this.openRepair());
   }
 
   /** Minijuego: gira los 3 engranajes hasta que todos los marcadores apunten arriba. */
   private openRepair(): void {
+    this.bubbles.silence(this.time.now);
+    this.hideBubble();
     const c = this.add.container(0, 0).setDepth(95);
     const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.55).setOrigin(0).setInteractive();
     c.add(dim);
@@ -1608,7 +1988,8 @@ export default class GameScene extends Phaser.Scene {
           audio.repaired();
           this.repairing = false;
           c.destroy();
-          this.showBubble('¡Ascensor reparado! ¡A seguir!', CAB_X, 300, 2000);
+          this.say('¡Ascensor reparado! ¡A seguir!', { priority: PRIORITY.rule, ttl: 2000 });
+          this.reseReact('repaired', '¡Como nuevo! Venga, que la cola sigue ahí.');
         }
       });
       c.add(zone);
@@ -1622,17 +2003,227 @@ export default class GameScene extends Phaser.Scene {
     this.speechTimer = this.time.addEvent({
       delay: 3500, loop: true,
       callback: () => {
-        if (this.won || this.paused || this.repairing) return;
+        if (this.won || this.paused || this.repairing || !this.sceneVisible) return;
+        if (this.reseActive || this.teaching) return;
         const waiting = this.passengers.filter((p) => p.state === 'queue');
         if (waiting.length === 0) return;
-        // Mostrar hasta 2 globos a la vez, sin solaparse (turnos).
-        const shuffled = [...waiting].sort(() => Math.random() - 0.5).slice(0, 2);
-        shuffled.forEach((p, i) => {
-          const line = queueLine(p.def.kind, p.dest);
-          this.showBubble(line, p.container.x, p.container.y - 70, 3000);
+        // Habla UNO (turnos reales) y se elige al que lleva más callado: así no
+        // siempre repite el mismo y nadie se queda sin decir nada en un nivel largo.
+        const p = waiting.reduce((a, b) => (a.lastSpeak <= b.lastSpeak ? a : b));
+        // Repite la frase del vecino que acaba de hablar solo si tiene manía de eco.
+        this.say(queueLineFor(p.monsterId, p.def.kind, p.dest), {
+          speaker: p, priority: PRIORITY.idle, ttl: 2600,
         });
       },
     });
+  }
+
+  /**
+   * Retrato del reparto para el director de interacciones. Solo LEE el estado del
+   * juego: `systems/interactions.ts` no toca el solver ni las reglas del ascensor.
+   */
+  private castSnapshot(): ActorSnapshot[] {
+    const enCabina = new Set(this.cabIds());
+    return this.passengers
+      .filter((p) => p.state !== 'delivered')
+      .map((p) => ({
+        id: p.id,
+        monsterId: p.monsterId,
+        rule: p.def.rule,
+        place: (p.state === 'queue' ? 'queue' : enCabina.has(p.id) ? 'cab' : 'gone') as ActorSnapshot['place'],
+        asleep: p.asleep,
+        coupleWith: this.coupleOf.get(p.id),
+        duoWith: this.duoOf.get(p.id),
+        enemies: this.enemiesOf.get(p.id),
+        cabLoad: enCabina.size,
+      }));
+  }
+
+  /**
+   * UN efecto por fotograma como mucho (systems/interactions.ts prioriza lo
+   * importante). Los efectos son visuales y de sonido: jamás cambian el estado del
+   * puzle (ni destinos, ni cabina, ni estrellas).
+   */
+  private updateInteractions(nowMs: number): void {
+    const actores = this.castSnapshot();
+    if (actores.length === 0) return;
+    const ev = this.interactions.update(nowMs, actores, {
+      moving: this.moving,
+      dialogActive: this.reseActive || this.teaching || this.repairing,
+      liveParticles: this.liveParticles,
+    });
+    if (!ev) return;
+    const a = this.passengers[ev.a];
+    const b = ev.b !== undefined ? this.passengers[ev.b] : undefined;
+    if (!a || a.state === 'delivered') return;
+    this.playInteraction(ev, a, b);
+  }
+
+  /**
+   * Traduce un evento de interacción a animación + partículas + conversación.
+   *
+   * El director (`systems/interactions.ts`) sólo dice QUIÉNES interactúan y con qué
+   * gravedad: las frases salen de `data/voices.ts`, que sabe qué personajes tienen algo
+   * que decirse. Si no hay conversación escrita, no se habla nada (silencio antes que
+   * relleno) pero la animación sí ocurre.
+   */
+  private playInteraction(ev: InteractionEvent, a: Passenger, b?: Passenger): void {
+    const pri = ev.weight === 2 ? PRIORITY.chat : ev.weight === 1 ? PRIORITY.idle : PRIORITY.chat;
+    const lines = this.linesFor(a, b);
+    switch (ev.kind) {
+      case 'coupleGaze':
+        // Se miran y salen corazones: la única pareja que no pierde la estrella.
+        this.playReaction(a, 'joy');
+        if (b) { this.playReaction(b, 'joy'); this.lookAtEachOther(a, b); }
+        this.puff('heart', a.container.x + 26, a.container.y - 44, 6);
+        if (b) this.puff('heart', b.container.x - 26, b.container.y - 44, 6);
+        audio.heartSfx();
+        this.sayCouple(lines, a, b, pri);
+        break;
+      case 'enemyGlare':
+        this.playReaction(a, 'anger');
+        if (b) { this.playReaction(b, 'anger'); this.lookAtEachOther(a, b); }
+        this.puff('sparkle', a.container.x, a.container.y - 52, 5);
+        audio.grumble();
+        this.shake(1.4, 60);
+        this.sayCouple(lines, a, b, pri);
+        break;
+      case 'duoHug':
+        this.playSpecs(a, MOTION_PRESETS.hop);
+        if (b) this.playSpecs(b, MOTION_PRESETS.hop);
+        audio.slime();
+        this.sayCouple(lines, a, b, pri);
+        break;
+      case 'twinsMirror':
+        // Toni imita a Tini con un retardo visible: el mismo gesto, más tarde.
+        this.playMotion(a, a.pers.idle === 'mirror' ? 'waddle' : 'hop');
+        if (b) this.playMotion(b, b.pers.idle === 'mirror' ? 'waddle' : 'hop');
+        audio.twinBlip();
+        this.sayCouple(lines, a, b, pri);
+        break;
+      case 'shyHide':
+        // Sombrín se encoge bajo el sombrero y susurra.
+        this.playSpecs(a, MOTION_PRESETS.squeeze);
+        audio.whisper();
+        if (lines) this.say(lines.a, { speaker: a, priority: pri, ttl: 1900 });
+        break;
+      case 'giantStomp':
+        this.playSpecs(a, MOTION_PRESETS.stomp);
+        audio.thud();
+        this.reseReact('giant', '¡Cuidado con ese pisotón! El suelo cruje entero.');
+        // Vibración pequeña: la cámara se mueve 2 px, el hotel NO se redibuja.
+        this.shake(2.2, 140);
+        if (lines) this.say(lines.a, { speaker: a, priority: pri, ttl: 1900 });
+        break;
+      case 'ghostPhase':
+        // Atraviesa visualmente: baja su opacidad un instante, sin mover a nadie.
+        this.tweens.add({ targets: a.image, alpha: 0.45, duration: 420, yoyo: true, ease: 'Sine.easeInOut' });
+        audio.whoosh();
+        this.reseReact('ghost', 'Los fantasmas no ocupan sitio… ni usan la puerta.');
+        if (lines) this.say(lines.a, { speaker: a, priority: pri, ttl: 1900 });
+        break;
+      case 'snore':
+        this.playReaction(a, 'sleepy');
+        audio.snore();
+        if (lines) this.say(lines.a, { speaker: a, priority: pri, ttl: 1900 });
+        break;
+      case 'fearTremble':
+        this.playSpecs(a, MOTION_PRESETS.squeeze);
+        audio.tremble();
+        if (lines) this.say(lines.a, { speaker: a, priority: pri, ttl: 1900 });
+        break;
+      default:
+        this.playQuirk(a);
+        if (a.pers.sfx) audio.signature(a.pers.sfx);
+        if (lines) this.say(lines.a, { speaker: a, priority: PRIORITY.chat, ttl: 1900 });
+        break;
+    }
+  }
+
+  /** Dos personajes se giran el uno hacia el otro (con la textura de mirada). */
+  private lookAtEachOther(a: Passenger, b: Passenger): void {
+    if (!hasGaze(a.monsterId) || !hasGaze(b.monsterId)) return;
+    const haciaB = b.container.x >= a.container.x ? 'right' : 'left';
+    const haciaA = haciaB === 'right' ? 'left' : 'right';
+    const hasta = this.time.now + 1500;
+    a.face = haciaB as FaceState; a.faceUntil = hasta;
+    b.face = haciaA as FaceState; b.faceUntil = hasta;
+    this.applyFace(a, this.time.now);
+    this.applyFace(b, this.time.now);
+  }
+
+  /**
+   * Qué tienen que decirse dos personajes ahora mismo. Prioridad: conversación
+   * escrita para ESA pareja (`duoLineFor`, p. ej. Tini↔Toni o Pegajín↔Pegajón) y, si
+   * no, lo que cada uno opina del otro (`meetLineFor`: Sombrín ante un fantasma,
+   * Nocti ante un gigante...). `null` = no hay nada que decir.
+   */
+  private linesFor(a: Passenger, b?: Passenger): { a: string; b: string } | null {
+    if (!b) return null;
+    const par = duoLineFor(a.monsterId, b.monsterId);
+    if (par) return par;
+    const desdeA = meetLineFor(a.monsterId, b.monsterId, b.def.rule);
+    const desdeB = meetLineFor(b.monsterId, a.monsterId, a.def.rule);
+    if (desdeA && desdeB) return { a: desdeA, b: desdeB };
+    if (desdeA) return { a: desdeA, b: '' };
+    if (desdeB) return { a: desdeB, b: '' };
+    return null;
+  }
+
+  /** Conversación entre dos: primero habla uno, el otro contesta al terminar. */
+  private sayCouple(
+    lines: { a: string; b: string } | null, a: Passenger, b: Passenger | undefined, pri: BubblePriority,
+  ): void {
+    if (!lines || !lines.a) return;
+    this.say(lines.a, { speaker: a, priority: pri, ttl: 1800 });
+    if (b && lines.b) {
+      this.time.delayedCall(1850, () => this.say(lines.b, { speaker: b, priority: pri, ttl: 1800 }));
+    }
+  }
+
+  /**
+   * Manía visual propia. Cada quirk tiene su animación corta, su sonido y (si
+   * procede) su partícula. Todo se toma de tablas exhaustivas: añadir un quirk nuevo
+   * obliga a darle las tres cosas (lo comprueba una prueba).
+   */
+  private playQuirk(p: Passenger): void {
+    const q = p.quirks.length ? p.quirks[Math.floor(Math.random() * p.quirks.length)] : undefined;
+    if (!q) { this.playSpecs(p, REACTION_PRESETS.surprise); return; }
+    this.playSpecs(p, QUIRK_MOTION[q]);
+    audio.signature(QUIRK_SFX[q]);
+    const fx = QUIRK_FX[q];
+    if (fx) this.puff(fx[0], p.container.x + 24, p.container.y - 34, fx[1]);
+  }
+
+  /**
+   * Ráfaga de partículas BARATA y contabilizada. Máximo `FX_LIMITS.maxLiveParticles`
+   * vivas a la vez en toda la escena: si el tope está alcanzado no se emite nada
+   * (los efectos decorativos se pierden antes que los fotogramas).
+   */
+  private puff(texture: string, x: number, y: number, count: number): void {
+    const n = Math.min(count, FX_LIMITS.maxLiveParticles - this.liveParticles);
+    if (n <= 0) return;
+    this.liveParticles += n;
+    for (let i = 0; i < n; i += 1) {
+      const img = this.add.image(x, y, texture)
+        .setDepth(42).setScale(0.5 + Math.random() * 0.3).setAlpha(0.95);
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 18 + Math.random() * 34;
+      this.tweens.add({
+        targets: img,
+        x: x + Math.cos(ang) * dist,
+        y: y + Math.sin(ang) * dist - 22,
+        alpha: 0, scale: img.scale * 1.35,
+        duration: 620 + Math.random() * 260, ease: 'Quad.easeOut',
+        onComplete: () => { img.destroy(); this.liveParticles -= 1; },
+      });
+    }
+  }
+
+  /** Sacudida de cámara mínima (nunca más de 3 px: el HUD no debe bailar). */
+  private shake(intensity: number, duration: number): void {
+    if (!this.sceneVisible) return;
+    this.cameras.main.shake(duration, Math.min(3, intensity) / H);
   }
 
   // ── Recepcionista Rese: personaje guía ─────────────────────────────────
@@ -1846,9 +2437,33 @@ export default class GameScene extends Phaser.Scene {
     if (clip) this.startDialog(clip.lines);
   }
 
+  /**
+   * RESE REACCIONA (Sprint 2). Antes sólo hablaba en los tutoriales y al perdonar una
+   * regla; ahora comenta lo que ve mientras juega, SIN abrir su diálogo completo: un
+   * globo corto desde el mostrador, prioridad `hint`, y la partida sigue corriendo.
+   *
+   * Se dispara una sola vez por situación y por nivel (`reseSeen`) para que no se
+   * convierta en un loro. Su imagen y su sistema de conversaciones NO cambian.
+   */
+  private reseReact(situacion: ReseSituation, texto: string): void {
+    if (this.won || this.reseActive || this.teaching || this.repairing) return;
+    if (this.reseSeen.has(situacion)) return;
+    this.reseSeen.add(situacion);
+    this.bubbles.say(RESE_SPEAKER, texto, PRIORITY.hint, this.time.now, 2400);
+    // Su gesto: se asoma un poco y vuelve (el rig completo sigue reservado al diálogo).
+    this.tweens.killTweensOf(this.reseRig);
+    this.tweens.add({
+      targets: this.reseRig, y: this.reseRig.y - 26, duration: 260,
+      ease: 'Back.easeOut', yoyo: true, hold: 900,
+    });
+  }
+
   /** Diálogo de Rese: solo texto, letra a letra, con clic para continuar. */
   private startDialog(lines: string[]): void {
     if (this.reseActive || this.won) return;
+    // Nadie más habla mientras Rese explica algo: se vacía la cola de bocadillos.
+    this.bubbles.silence(this.time.now);
+    this.hideBubble();
     this.dialogLines = lines;
     this.reseActive = true;
     this.lineIdx = -1;
@@ -1931,6 +2546,11 @@ export default class GameScene extends Phaser.Scene {
     if (this.won) return;
     this.won = true;
     audio.victory();
+    // Se acabó la partida: fuera bocadillos y reposo (la pantalla de resultados manda).
+    this.bubbles.silence(this.time.now);
+    this.hideBubble();
+    this.speechTimer?.remove();
+    this.reseReact('levelClear', '¡Nivel completado! Te lo apunto en el registro.');
     const effDistance = this.distance;
     let stars = starsFor(effDistance, this.optimal);
     // Cada regla rota (pareja separada, enemigos juntos) resta 1 estrella.
