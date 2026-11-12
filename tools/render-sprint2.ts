@@ -1,0 +1,706 @@
+/**
+ * RENDERIZADO FUERA DEL NAVEADOR — ¡Piso Equivocado! (Sprint 2)
+ *
+ * POR QUÉ EXISTE
+ * --------------
+ * En este entorno no hay navegador (ni se puede instalar: los binarios de Chromium
+ * se descargan desde dominios fuera de la lista de hosts permitidos), así que NO se
+ * puede hacer una captura de pantalla del juego corriendo ni grabar un vídeo.
+ *
+ * Lo que SÍ se puede hacer —y es lo que hace esta herramienta— es ejecutar el código
+ * de dibujo REAL del juego fuera de Phaser:
+ *
+ *   - los 20 `DRAWERS` de `BootScene.ts`, con sus coordenadas y colores exactos,
+ *     extraídos del fuente y transformados con esbuild (no redibujados a mano);
+ *   - las texturas auxiliares reales (sombra, corazón, destello, estrella);
+ *   - la geometría real de la cola (`systems/queueLayout.ts`) para el nivel que sea;
+ *   - el reposo real (`systems/animator.ts::idleFrame`) fotograma a fotograma;
+ *   - la forma real del bocadillo (copiada de `GameScene.drawBubbleShape`) colocada
+ *     donde decide `systems/bubbles.ts::anchorBubble`.
+ *
+ * QUÉ NO ES
+ * ---------
+ * No es una captura del juego. El fondo es esquemático (no se reproduce el arte del
+ * hotel, que depende de cosméticos y de decenas de primitivas de escena) y el
+ * renderizador de Phaser (WebGL/Canvas con sus uniones de línea y filtrado de
+ * texturas) se sustituye por un shim sobre `@napi-rs/canvas` cuya semántica se copió
+ * de `node_modules/phaser/src/gameobjects/graphics/Graphics.js`. Los SPRITES y las
+ * POSICIONES son exactos; el acabado final puede diferir en detalles de antialiasing.
+ *
+ * Uso:  npx vite-node tools/render-sprint2.ts [nivel]
+ * Salida: docs/imagenes/*.png y *.gif
+ */
+// Los módulos NATIVOS (canvas de Skia) y esbuild no pueden pasar por el
+// transformador de Vite: se cargan con el require de Node. Los módulos del juego
+// sí van por Vite, que es quien entiende TypeScript y `?raw`.
+import { createRequire } from 'node:module';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const require = createRequire(import.meta.url);
+const { createCanvas } = require('@napi-rs/canvas') as typeof import('@napi-rs/canvas');
+const { transformSync } = require('esbuild') as typeof import('esbuild');
+const { GIFEncoder, quantize, applyPalette } = require('gifenc') as {
+  GIFEncoder: () => {
+    writeFrame: (i: Uint8Array, w: number, h: number, o: { palette: number[][]; delay: number }) => void;
+    finish: () => void;
+    bytes: () => Uint8Array;
+  };
+  quantize: (rgba: Uint8Array, n: number) => number[][];
+  applyPalette: (rgba: Uint8Array, palette: number[][]) => Uint8Array;
+};
+type Canvas = ReturnType<typeof createCanvas>;
+type SKRSContext2D = ReturnType<Canvas['getContext']>;
+
+import BOOT_SRC from '../src/scenes/BootScene.ts?raw';
+import { LEVELS } from '../src/data/levels';
+import { MONSTERS, MONSTER_MAP, floorColor } from '../src/data/monsters';
+import { buildCrew } from '../src/systems/rules';
+import { layoutQueue, QUEUE_AREA, spriteSize } from '../src/systems/queueLayout';
+import { bubbleBox, anchorBubble, wrapText } from '../src/systems/bubbles';
+import { personalityOf, idlePhase, hasBlink, hasGaze } from '../src/systems/personality';
+import { idleFrame } from '../src/systems/animator';
+import { queueLineFor } from '../src/data/voices';
+
+const T = 128;                    // tamaño de textura de monstruo (real, de BootScene)
+const SALIDA = resolve(process.cwd(), 'docs/imagenes');
+mkdirSync(SALIDA, { recursive: true });
+
+// ── Shim de Phaser.GameObjects.Graphics sobre canvas 2D ──────────────────────
+// La semántica de cada método se copió de Graphics.js de Phaser (relleno inmediato
+// en fillCircle/fillEllipse/..., acumulación de path en beginPath/arc/fillPath).
+const TAU = Math.PI * 2;
+
+function color(n: number, a = 1): string {
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+type Op = ['m' | 'l', number, number] | ['z'] | ['a', number, number, number, number, number, boolean];
+
+class Graphics {
+  private relleno = 'rgba(0,0,0,1)';
+  private grosor = 0;
+  private trazo = 'rgba(0,0,0,1)';
+  private path: Op[] = [];
+  constructor(private ctx: SKRSContext2D) {}
+
+  fillStyle(c: number, a = 1): this { this.relleno = color(c, a); return this; }
+  lineStyle(w: number, c: number, a = 1): this { this.grosor = w; this.trazo = color(c, a); return this; }
+  beginPath(): this { this.path = []; return this; }
+  moveTo(x: number, y: number): this { this.path.push(['m', x, y]); return this; }
+  lineTo(x: number, y: number): this { this.path.push(['l', x, y]); return this; }
+  closePath(): this { this.path.push(['z']); return this; }
+  arc(x: number, y: number, r: number, sa: number, ea: number, ccw = false): this {
+    this.path.push(['a', x, y, r, sa, ea, !!ccw]);
+    return this;
+  }
+  /** Phaser: beginPath + moveTo(centro) + arc + closePath (hay que llamar a fillPath). */
+  slice(x: number, y: number, r: number, sa: number, ea: number, ccw = false): this {
+    return this.beginPath().moveTo(x, y).arc(x, y, r, sa, ea, ccw).closePath();
+  }
+  private trazar(): void {
+    const c = this.ctx;
+    c.beginPath();
+    for (const op of this.path) {
+      if (op[0] === 'm') c.moveTo(op[1], op[2]);
+      else if (op[0] === 'l') c.lineTo(op[1], op[2]);
+      else if (op[0] === 'z') c.closePath();
+      else c.arc(op[1], op[2], op[3], op[4], op[5], op[6]);
+    }
+  }
+  fillPath(): this { this.trazar(); this.ctx.fillStyle = this.relleno; this.ctx.fill(); return this; }
+  strokePath(): this {
+    this.trazar();
+    this.ctx.lineWidth = this.grosor;
+    this.ctx.strokeStyle = this.trazo;
+    this.ctx.lineJoin = 'round';
+    this.ctx.lineCap = 'round';
+    this.ctx.stroke();
+    return this;
+  }
+  fillCircle(x: number, y: number, r: number): this { return this.beginPath().arc(x, y, r, 0, TAU).fillPath(); }
+  strokeCircle(x: number, y: number, r: number): this { return this.beginPath().arc(x, y, r, 0, TAU).strokePath(); }
+  fillRect(x: number, y: number, w: number, h: number): this {
+    this.ctx.fillStyle = this.relleno; this.ctx.fillRect(x, y, w, h); return this;
+  }
+  fillTriangle(x1: number, y1: number, x2: number, y2: number, x3: number, y3: number): this {
+    return this.beginPath().moveTo(x1, y1).lineTo(x2, y2).lineTo(x3, y3).closePath().fillPath();
+  }
+  /** Phaser: Ellipse(x, y, width, height) → x,y es el CENTRO y width/height completos. */
+  fillEllipse(x: number, y: number, w: number, h: number): this {
+    this.ctx.beginPath(); this.ctx.ellipse(x, y, w / 2, h / 2, 0, 0, TAU);
+    this.ctx.fillStyle = this.relleno; this.ctx.fill(); return this;
+  }
+  strokeEllipse(x: number, y: number, w: number, h: number): this {
+    this.ctx.beginPath(); this.ctx.ellipse(x, y, w / 2, h / 2, 0, 0, TAU);
+    this.ctx.lineWidth = this.grosor; this.ctx.strokeStyle = this.trazo; this.ctx.stroke(); return this;
+  }
+  private rutaRedondeada(x: number, y: number, w: number, h: number, r: number | Record<string, number>): void {
+    const tl = typeof r === 'number' ? r : (r.tl ?? 20);
+    const tr = typeof r === 'number' ? r : (r.tr ?? 20);
+    const br = typeof r === 'number' ? r : (r.br ?? 20);
+    const bl = typeof r === 'number' ? r : (r.bl ?? 20);
+    const c = this.ctx;
+    c.beginPath();
+    c.moveTo(x + tl, y);
+    c.lineTo(x + w - tr, y);
+    c.arcTo(x + w, y, x + w, y + tr, tr);
+    c.lineTo(x + w, y + h - br);
+    c.arcTo(x + w, y + h, x + w - br, y + h, br);
+    c.lineTo(x + bl, y + h);
+    c.arcTo(x, y + h, x, y + h - bl, bl);
+    c.lineTo(x, y + tl);
+    c.arcTo(x, y, x + tl, y, tl);
+    c.closePath();
+  }
+  fillRoundedRect(x: number, y: number, w: number, h: number, r: number | Record<string, number> = 20): this {
+    this.rutaRedondeada(x, y, w, h, r); this.ctx.fillStyle = this.relleno; this.ctx.fill(); return this;
+  }
+  strokeRoundedRect(x: number, y: number, w: number, h: number, r: number | Record<string, number> = 20): this {
+    this.rutaRedondeada(x, y, w, h, r);
+    this.ctx.lineWidth = this.grosor; this.ctx.strokeStyle = this.trazo; this.ctx.stroke(); return this;
+  }
+  fillPoints(pts: Array<{ x: number; y: number }>, closeShape = false, closePath = false): this {
+    this.beginPath();
+    this.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i += 1) this.lineTo(pts[i].x, pts[i].y);
+    if (closeShape) this.lineTo(pts[0].x, pts[0].y);
+    if (closePath) this.closePath();
+    return this.fillPath();
+  }
+  strokePoints(pts: Array<{ x: number; y: number }>, closeShape = false, closePath = false): this {
+    this.beginPath();
+    this.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i += 1) this.lineTo(pts[i].x, pts[i].y);
+    if (closeShape) this.lineTo(pts[0].x, pts[0].y);
+    if (closePath) this.closePath();
+    return this.strokePath();
+  }
+  lineBetween(x1: number, y1: number, x2: number, y2: number): this {
+    return this.beginPath().moveTo(x1, y1).lineTo(x2, y2).strokePath();
+  }
+  clear(): this { this.ctx.clearRect(0, 0, 4096, 4096); return this; }
+  generateTexture(): this { return this; }
+  destroy(): void { /* nada */ }
+}
+
+/** Stub mínimo de Phaser para el código extraído (sólo usa Math.Vector2). */
+const PhaserStub = {
+  Math: { Vector2: class { constructor(public x = 0, public y = 0) {} } },
+};
+
+// ── Extracción del código de dibujo REAL de BootScene ────────────────────────
+function extraerDibujantes(): {
+  DRAWERS: Record<string, (g: unknown, mood: string) => void>;
+  setFace: (blink: boolean, gaze: number) => void;
+} {
+  const inicio = BOOT_SRC.indexOf('const T = 128;');
+  const fin = BOOT_SRC.indexOf('export default class BootScene');
+  if (inicio < 0 || fin < 0 || fin < inicio) throw new Error('no se localizó el bloque de dibujantes');
+  const fuente = BOOT_SRC.slice(inicio, fin);
+  if (fuente.includes('export ')) throw new Error('el bloque extraído contiene un export inesperado');
+  const codigo = `${fuente}
+function setFace(b, gz) { BLINK = b; GAZE = gz; }
+return { DRAWERS, T, C, OUT, setFace };`;
+  const js = transformSync(codigo, { loader: 'ts', target: 'es2020' }).code;
+  // eslint-disable-next-line no-new-func
+  return new Function('Phaser', js)(PhaserStub);
+}
+
+/**
+ * Texturas auxiliares REALES (sombra, corazón, destello) extraídas de `create()`.
+ *
+ * Sólo se buscan los bloques de estas tres texturas: la regex general también
+ * atrapaba el bucle que genera los monstruos (que contiene llaves sueltas) y el
+ * código extraído no compilaba. Cada bloque va entre `const g = this.add.graphics()`
+ * y su `g.destroy()`, así que se recorta por esos dos bordes y se valida.
+ */
+const AUXILIARES: Array<[string, number, number]> = [['heart', 44, 44], ['sparkle', 24, 24], ['shadow', 64, 20]];
+
+function extraerAuxiliares(): Record<string, Canvas> {
+  const out: Record<string, Canvas> = {};
+  for (const [nombre, w, h] of AUXILIARES) {
+    const marca = `g.generateTexture('${nombre}', ${w}, ${h});`;
+    const fin = BOOT_SRC.indexOf(marca);
+    if (fin < 0) throw new Error(`no se encontró la textura auxiliar ${nombre}`);
+    // El bloque empieza en el `this.add.graphics()` más cercano por encima.
+    const inicio = BOOT_SRC.lastIndexOf('const g = this.add.graphics();', fin);
+    if (inicio < 0) throw new Error(`bloque incompleto para ${nombre}`);
+    const cuerpo = BOOT_SRC.slice(inicio + 'const g = this.add.graphics();'.length, fin);
+    if (cuerpo.includes('this.add') || cuerpo.includes('DRAWERS')) {
+      throw new Error(`el bloque de ${nombre} se ha recortado mal`);
+    }
+    const m = { 1: cuerpo, 2: nombre, 3: String(w), 4: String(h) } as unknown as RegExpExecArray;
+    {
+      const [, cuerpo2] = [null, cuerpo] as unknown as Array<string | null>;
+      void cuerpo2;
+    }
+    out[nombre] = renderizar(Number(m[3]), Number(m[4]), (g) => {
+      // Se envuelve el bloque en una función: el de `sparkle` y compañía son
+      // sentencias sueltas que necesitan un cuerpo propio.
+      const js = transformSync(`function __dibujar(g: any, Phaser: any): void {${m[1]}\n}`,
+        { loader: 'ts', target: 'es2020' }).code;
+      // eslint-disable-next-line no-new-func
+      new Function(`${js}; return __dibujar;`)()(g, PhaserStub);
+    });
+  }
+  return out;
+}
+
+function renderizar(w: number, h: number, dibujar: (g: Graphics) => void): Canvas {
+  const canvas = createCanvas(w, h);
+  const ctx = canvas.getContext('2d');
+  dibujar(new Graphics(ctx));
+  return canvas;
+}
+
+const { DRAWERS, setFace } = extraerDibujantes();
+const AUX = extraerAuxiliares();
+
+// ── Sprites: los 20 monstruos con sus variantes de cara REALES ───────────────
+type Cara = 'open' | 'blink' | 'left' | 'right';
+const SPRITES = new Map<string, Canvas>();
+
+function sprite(monsterId: string, cara: Cara = 'open', mood = 'happy'): Canvas {
+  const clave = `${monsterId}|${mood}|${cara}`;
+  const existente = SPRITES.get(clave);
+  if (existente) return existente;
+  setFace(cara === 'blink', cara === 'left' ? -1 : cara === 'right' ? 1 : 0);
+  const canvas = renderizar(T, T, (g) => DRAWERS[monsterId](g, mood));
+  setFace(false, 0);
+  SPRITES.set(clave, canvas);
+  return canvas;
+}
+
+// ── Dibujo de un pasajero tal y como lo compone GameScene ────────────────────
+interface PaxVisual {
+  id: number;
+  monsterId: string;
+  dest: number;
+  rule: string;
+  escala: number;          // 0,5 × def.scale × fitScale (la real de la cola)
+  couple: boolean;
+  enemy: boolean;
+  fase: number;
+  pers: ReturnType<typeof personalityOf>;
+}
+
+function dibujarPasajero(
+  ctx: SKRSContext2D, p: PaxVisual, x: number, y: number, t: number, cara: Cara = 'open',
+): void {
+  const f = idleFrame(p.pers.idle, t, p.fase, p.pers.amp, p.pers.speed,
+    p.pers.idle === 'mirror' ? 0.42 * p.pers.speed * TAU : 0);
+  const ancho = T * p.escala;
+
+  // Sombra (textura real 'shadow' 64×20, escala 0,9, en (0, 28) del contenedor).
+  if (AUX.shadow) ctx.drawImage(AUX.shadow, x - 32 * 0.9, y + 28 - 10 * 0.9, 64 * 0.9, 20 * 0.9);
+
+  // Sprite con el transform del reposo (posición, escala y ángulo reales).
+  // Los fantasmas viven con alpha 0,9 en el juego (GameScene: `setAlpha(0.9)`).
+  ctx.save();
+  ctx.globalAlpha = p.rule === 'ghost' ? 0.9 : 1;
+  ctx.translate(x + f.dx, y + f.dy);
+  ctx.rotate((f.angle * Math.PI) / 180);
+  const img = sprite(p.monsterId, cara === 'open' && !hasBlink(p.monsterId) ? 'open' : cara);
+  ctx.drawImage(img, (-T / 2) * p.escala * f.sx, (-T / 2) * p.escala * f.sy,
+    T * p.escala * f.sx, T * p.escala * f.sy);
+  ctx.restore();
+
+  // Insignia del destino: el contenedor la coloca en (0, -38) en píxeles de escena
+  // (NO escala con el sprite), con círculo r=14, anillo blanco de 3 y número de 17px.
+  const badgeY = y - 38;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, badgeY, 14, 0, TAU);
+  ctx.fillStyle = color(floorColor(p.dest));
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,1)';
+  ctx.stroke();
+  ctx.font = 'bold 17px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillText(`${p.dest}`, x, badgeY + 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(`${p.dest}`, x, badgeY);
+  ctx.restore();
+
+  // Corazón de pareja y rayo de enemigo (texturas y posiciones reales).
+  if (p.couple && AUX.heart) ctx.drawImage(AUX.heart, x + 20 - 12, badgeY - 12, 24, 24);
+
+  if (p.enemy) {
+    ctx.drawImage(destelloRojo(), x - 20 - 8.4, badgeY - 8.4, 16.8, 16.8);
+    void ancho;
+  }
+}
+
+/** El destello de enemigo con el tinte rojo del juego (0xef4444), sin tocar el fondo. */
+let destelloTintado: Canvas | null = null;
+function destelloRojo(): Canvas {
+  if (destelloTintado) return destelloTintado;
+  const base = AUX.sparkle;
+  const c = createCanvas(base.width, base.height);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(base, 0, 0);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = 'rgba(239,68,68,1)';
+  ctx.fillRect(0, 0, base.width, base.height);
+  destelloTintado = c;
+  return c;
+}
+
+// ── Bocadillo con la forma REAL de GameScene.drawBubbleShape ─────────────────
+function dibujarGlobo(ctx: SKRSContext2D, x: number, y: number, texto: string): { w: number; h: number } {
+  // Métricas reales: Arial 17, ajuste a 250 px (se usa sans-serif: Arial no existe aquí).
+  ctx.font = '17px sans-serif';
+  const lineas = wrapText(texto, 30);
+  const anchoTexto = Math.max(...lineas.map((l) => ctx.measureText(l).width));
+  const altoTexto = lineas.length * 20;
+  const w = Math.min(320, anchoTexto + 52);
+  const h = Math.max(58, altoTexto + 40);
+
+  const g = new Graphics(ctx);
+  ctx.save();
+  ctx.translate(x, y);
+  const spikes = 16;
+  const pts: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < spikes * 2; i += 1) {
+    const a = (i / (spikes * 2)) * TAU;
+    const jitter = ((i * 37) % 7) / 100;
+    const r = i % 2 === 0 ? 1 : 0.74 + jitter;
+    pts.push({ x: Math.cos(a) * (w / 2) * r, y: Math.sin(a) * (h / 2) * r });
+  }
+  const tail = [
+    { x: -w * 0.18, y: h * 0.28 },
+    { x: -w * 0.42, y: h * 0.62 + 22 },
+    { x: w * 0.02, y: h * 0.34 },
+  ];
+  g.fillStyle(0x8f96a8, 0.55);
+  g.fillPoints(pts.map((p) => ({ x: p.x + 7, y: p.y + 9 })), true);
+  g.fillPoints(tail.map((p) => ({ x: p.x + 7, y: p.y + 9 })), true);
+  g.fillStyle(0xffffff, 0.98);
+  g.fillPoints(tail, true);
+  g.lineStyle(5, 0x241640, 1);
+  g.strokePoints(tail, true);
+  g.fillStyle(0xffffff, 0.98);
+  g.fillPoints(pts, true);
+  g.strokePoints(pts, true);
+  g.fillStyle(0xffffff, 1);
+  g.fillPoints([
+    { x: -w * 0.16, y: h * 0.26 },
+    { x: -w * 0.3, y: h * 0.44 },
+    { x: 0, y: h * 0.32 },
+  ], true);
+  ctx.font = '17px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#6b4423';
+  lineas.forEach((l, i) => ctx.fillText(l, 0, (i - (lineas.length - 1) / 2) * 20));
+  ctx.restore();
+  return { w, h };
+}
+
+// ── Fondo esquemático (NO es el arte del hotel) ──────────────────────────────
+function fondoEsquematico(ctx: SKRSContext2D, w: number, h: number, y0: number): void {
+  ctx.fillStyle = '#fdf3e3';
+  ctx.fillRect(0, 0, w, h);
+  // Suelo del vestíbulo con baldosas en perspectiva (aproximación del real).
+  ctx.fillStyle = '#f6dfc0';
+  ctx.fillRect(0, y0 + 780 - y0, w, h);
+  ctx.fillStyle = '#efcfa6';
+  ctx.fillRect(0, y0 + 780 - y0, w, 10);
+  for (let i = 0; i < 14; i += 1) {
+    ctx.strokeStyle = 'rgba(180,140,100,0.25)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(i * (w / 13), y0 + 780 - y0);
+    ctx.lineTo(w / 2 + (i * (w / 13) - w / 2) * 1.5, h);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(120,90,60,0.35)';
+  ctx.setLineDash([6, 6]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(QUEUE_AREA.left, QUEUE_AREA.top - y0, QUEUE_AREA.right - QUEUE_AREA.left, QUEUE_AREA.bottom - QUEUE_AREA.top);
+  ctx.setLineDash([]);
+}
+
+function rotulo(ctx: SKRSContext2D, texto: string, x: number, y: number, size = 13, fill = '#6b4423'): void {
+  ctx.font = `bold ${size}px sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = fill;
+  ctx.fillText(texto, x, y);
+}
+
+// ── Construcción del reparto visual de un nivel ──────────────────────────────
+function reparto(nivel: number): { pax: PaxVisual[]; slots: ReturnType<typeof layoutQueue> } {
+  const lvl = LEVELS[nivel - 1];
+  const crew = buildCrew(lvl);
+  const couples = new Set<number>();
+  lvl.couples.forEach(([a, b]) => { couples.add(a); couples.add(b); });
+  const enemies = new Set<number>();
+  lvl.enemies.forEach(([a, b]) => { enemies.add(a); enemies.add(b); });
+
+  // Escala real de la cola (0,5 × def.scale), igual que GameScene.queueScale.
+  const previos = crew.map((m, i) => {
+    const { w, h } = spriteSize(T, 0.5 * MONSTER_MAP[m.monsterId].scale);
+    return { id: i, w, h };
+  });
+  const previa = layoutQueue(previos, QUEUE_AREA);
+  const fit = previa.fitScale;
+
+  const pax: PaxVisual[] = crew.map((m, i) => {
+    const escala = 0.5 * MONSTER_MAP[m.monsterId].scale * fit;
+    return {
+      id: i, monsterId: m.monsterId, dest: m.dest, rule: m.rule, escala,
+      couple: couples.has(i), enemy: enemies.has(i),
+      fase: idlePhase(i, m.monsterId), pers: personalityOf(m.monsterId),
+    };
+  });
+  const items = pax.map((p) => {
+    const { w, h } = spriteSize(T, p.escala);
+    return { id: p.id, w, h };
+  });
+  return { pax, slots: layoutQueue(items, QUEUE_AREA) };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+const nivel = Number(process.argv[2] ?? 30);
+const { pax, slots } = reparto(nivel);
+
+// ── 1. Zona de espera del nivel, a 2× ────────────────────────────────────────
+function imagenCola(zoom: number, conMedidas: boolean, conGlobo: boolean, t: number): Canvas {
+  const y0 = 700;
+  const alto = 960 - y0;
+  const canvas = createCanvas(540 * zoom, alto * zoom);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(zoom, zoom);
+  fondoEsquematico(ctx, 540, alto, y0);
+
+  const porId = new Map(slots.slots.map((s) => [s.id, s]));
+  // Orden de dibujo real: la fila de atrás primero (depth 10) y la delantera encima (12).
+  const orden = [...pax].sort((a, b) => {
+    const sa = porId.get(a.id)!; const sb = porId.get(b.id)!;
+    return sa.depth - sb.depth || sa.x - sb.x;
+  });
+
+  // Líneas de suelo de cada fila.
+  if (conMedidas) {
+    const bases = [...new Set(slots.slots.map((s) => s.baseline))].sort((a, b) => a - b);
+    bases.forEach((b) => {
+      ctx.strokeStyle = 'rgba(37,99,235,0.55)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(0, b - y0); ctx.lineTo(540, b - y0); ctx.stroke();
+      ctx.setLineDash([]);
+      rotulo(ctx, `suelo y=${b.toFixed(0)}`, 4, b - y0 - 4, 11, '#1d4ed8');
+    });
+  }
+
+  const hablante = conGlobo ? orden.find((p) => p.monsterId === 'gordito') ?? orden[0] : null;
+  // Los pasajeros se dibujan sin el globo; el globo va después (depth 60 en el juego).
+  for (const p of orden) {
+    const s = porId.get(p.id)!;
+    dibujarPasajero(ctx, p, s.x, s.y - y0, t);
+    if (conMedidas) {
+      ctx.strokeStyle = 'rgba(220,38,38,0.75)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(s.x - s.w / 2, s.y - s.h / 2 - y0, s.w, s.h);
+      rotulo(ctx, `${s.w.toFixed(0)}px`, s.x - s.w / 2, s.y + s.h / 2 - y0 + 12, 10, '#b91c1c');
+    }
+  }
+
+  if (hablante && conGlobo) {
+    const s = porId.get(hablante.id)!;
+    const texto = queueLineFor(hablante.monsterId, MONSTER_MAP[hablante.monsterId].kind, hablante.dest);
+    const ancla = { x: s.x, y: s.y, w: s.w, h: s.h };
+    const otras = orden.filter((p) => p.id !== hablante.id).map((p) => {
+      const q = porId.get(p.id)!;
+      return { x: q.x, y: q.y, w: q.w, h: q.h };
+    });
+    const estimado = bubbleBox(texto);
+    const pos = anchorBubble(ancla, estimado, otras);
+    const real = dibujarGlobo(ctx, pos.x, pos.y - y0, texto);
+    if (conMedidas) {
+      ctx.strokeStyle = 'rgba(22,163,74,0.9)';
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(pos.x - real.w / 2, pos.y - y0 - real.h / 2, real.w, real.h);
+      ctx.setLineDash([]);
+      rotulo(ctx, `globo ${real.w.toFixed(0)}×${real.h.toFixed(0)} (estimado ${estimado.w.toFixed(0)}×${estimado.h.toFixed(0)})`,
+        6, 24, 11, '#15803d');
+      rotulo(ctx, `«${texto}»`, 6, 40, 11, '#15803d');
+    }
+  }
+
+  if (conMedidas) {
+    // Separaciones horizontales reales entre sprites de la misma fila.
+    for (const fila of [0, 1]) {
+      const enFila = slots.slots.filter((s) => s.row === fila).sort((a, b) => a.x - b.x);
+      for (let i = 1; i < enFila.length; i += 1) {
+        const prev = enFila[i - 1]; const act = enFila[i];
+        const hueco = act.x - act.w / 2 - (prev.x + prev.w / 2);
+        const mx = prev.x + prev.w / 2;
+        ctx.strokeStyle = hueco < 0 ? 'rgba(220,38,38,1)' : 'rgba(22,163,74,1)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(mx, act.baseline - y0 + 6); ctx.lineTo(mx + hueco, act.baseline - y0 + 6); ctx.stroke();
+        rotulo(ctx, hueco.toFixed(1), mx + hueco / 2 - 8, act.baseline - y0 + 20, 10, hueco < 0 ? '#b91c1c' : '#15803d');
+      }
+    }
+  }
+  return canvas;
+}
+
+// ── 2. Hoja de caras: los 20 con ojos abiertos y parpadeo real ───────────────
+function hojaCaras(): Canvas {
+  const cols = 10;
+  const celda = 150;
+  const canvas = createCanvas(cols * celda, 2 * celda + 96);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fdf3e3';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  rotulo(ctx, 'Cara de reposo (arriba) y parpadeo real (abajo) — texturas generadas por BootScene', 12, 26, 16);
+  rotulo(ctx, 'Nube y Señor VIP no parpadean a propósito: duermen con los ojos cerrados y llevan gafas de sol.', 12, 48, 13, '#8a6a4a');
+  MONSTERS.forEach((m, i) => {
+    const col = i % cols;
+    const fila = Math.floor(i / cols);
+    const x = col * celda;
+    const y = 64 + fila * celda;
+    for (const [k, cara] of [['open', 'open'], ['blink', hasBlink(m.id) ? 'blink' : 'open']] as Array<[string, Cara]>) {
+      const cx = x + (k === 'open' ? 38 : 112);
+      ctx.drawImage(sprite(m.id, cara), cx - 32, y + 6, 64, 64);
+      if (k === 'blink' && !hasBlink(m.id)) {
+        rotulo(ctx, 'no aplica', cx - 26, y + 84, 10, '#a08060');
+      }
+    }
+    rotulo(ctx, m.name, x + 8, y + 96, 12);
+  });
+  return canvas;
+}
+
+// ── 3. GIF del reposo real (idleFrame fotograma a fotograma) ─────────────────
+function gifReposo(): { datos: Uint8Array; ancho: number; alto: number; fps: number } {
+  const elegidos = ['sombrin', 'gordito', 'gemelos', 'nocti', 'fantasmita', 'grunon', 'moco', 'temblorin'];
+  const celda = 118;
+  const ancho = elegidos.length * celda;
+  const alto = celda + 54;
+  const fps = 20;
+  const segundos = 3;
+  const frames = fps * segundos;
+  // Parpadeo forzado en un instante conocido, con la duración REAL del juego (130 ms).
+  const blinkDesde = 1.2;
+  const blinkHasta = blinkDesde + 0.13;
+
+  const gif = GIFEncoder();
+  const canvas = createCanvas(ancho, alto);
+  const ctx = canvas.getContext('2d');
+  for (let f = 0; f < frames; f += 1) {
+    const t = f / fps;
+    ctx.fillStyle = '#fdf3e3';
+    ctx.fillRect(0, 0, ancho, alto);
+    elegidos.forEach((id, i) => {
+      const def = MONSTER_MAP[id];
+      const x = i * celda + celda / 2;
+      const y = 74;
+      const p: PaxVisual = {
+        id: i, monsterId: id, dest: 3, rule: def.rule,
+        escala: 0.5 * def.scale, couple: false, enemy: false,
+        fase: idlePhase(i, id), pers: personalityOf(id),
+      };
+      const cara: Cara = (t >= blinkDesde && t < blinkHasta && hasBlink(id)) ? 'blink' : 'open';
+      // Sin insignia: aquí se juzga el movimiento del cuerpo, no el HUD.
+      const f2 = idleFrame(p.pers.idle, t, p.fase, p.pers.amp, p.pers.speed,
+        p.pers.idle === 'mirror' ? 0.42 * p.pers.speed * TAU : 0);
+      if (AUX.shadow) ctx.drawImage(AUX.shadow, x - 28.8, y + 19, 57.6, 18);
+      ctx.save();
+      ctx.translate(x + f2.dx, y + f2.dy);
+      ctx.rotate((f2.angle * Math.PI) / 180);
+      const img = sprite(id, cara);
+      const w = T * p.escala * f2.sx;
+      const h = T * p.escala * f2.sy;
+      if (def.rule === 'ghost') ctx.globalAlpha = 0.9;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      ctx.restore();
+      rotulo(ctx, def.name, i * celda + 6, alto - 26, 12);
+      rotulo(ctx, p.pers.idle, i * celda + 6, alto - 10, 10, '#8a6a4a');
+    });
+    rotulo(ctx, `t = ${t.toFixed(2)} s   (parpadeo real: 130 ms en t=1,20 s)`, 8, 18, 13);
+    const rgba = new Uint8Array(ctx.getImageData(0, 0, ancho, alto).data);
+    const palette = quantize(rgba, 256);
+    const indexado = applyPalette(rgba, palette);
+    gif.writeFrame(indexado, ancho, alto, { palette, delay: 1000 / fps });
+  }
+  gif.finish();
+  return { datos: gif.bytes(), ancho, alto, fps };
+}
+
+// ── Guardado ────────────────────────────────────────────────────────────────
+function guardar(canvas: Canvas, nombre: string): string {
+  const ruta = resolve(SALIDA, nombre);
+  writeFileSync(ruta, canvas.toBuffer('image/png'));
+  return `${nombre} (${(canvas.width as number)}×${canvas.height as number})`;
+}
+
+const informes: string[] = [];
+informes.push(guardar(imagenCola(2, false, true, 0.7), `nivel${nivel}-zona-espera.png`));
+informes.push(guardar(imagenCola(2, true, true, 0.7), `nivel${nivel}-zona-espera-medidas.png`));
+informes.push(guardar(imagenCola(2, false, false, 2.1), `nivel${nivel}-zona-espera-fila2.png`));
+informes.push(guardar(hojaCaras(), 'caras-20-monstruos.png'));
+
+const gif = gifReposo();
+const rutaGif = resolve(SALIDA, 'animaciones-reposo.gif');
+writeFileSync(rutaGif, gif.datos);
+informes.push(`animaciones-reposo.gif (${gif.ancho}×${gif.alto}, ${gif.fps} fps, ${(gif.datos.length / 1024).toFixed(0)} kB)`);
+
+// ── Informe numérico de lo que se ve ────────────────────────────────────────
+const porId = new Map(slots.slots.map((s) => [s.id, s]));
+const filas = [0, 1].map((r) => slots.slots.filter((s) => s.row === r).sort((a, b) => a.x - b.x));
+console.log(`\nNIVEL ${nivel} — «${LEVELS[nivel - 1].title}» · ${pax.length} pasajeros · capacidad ${LEVELS[nivel - 1].capacity}`);
+console.log(`filas: ${slots.rows} · fitScale: ${slots.fitScale.toFixed(3)} · separación mínima usada: ${slots.minGapUsed.toFixed(1)} px`);
+console.log(`hueco libre sobre las cabezas: ${slots.headRoom.toFixed(1)} px (techo útil y=${QUEUE_AREA.top})\n`);
+filas.forEach((f, i) => {
+  if (!f.length) return;
+  console.log(`FILA ${i === 0 ? 'de atrás' : 'delantera'} (${f.length}): suelo y=${f[0].baseline.toFixed(0)}`);
+  f.forEach((s, k) => {
+    const p = pax.find((q) => q.id === s.id)!;
+    const prev = k > 0 ? f[k - 1] : null;
+    const hueco = prev ? (s.x - s.w / 2 - (prev.x + prev.w / 2)).toFixed(1) : '—';
+    console.log(`   ${MONSTER_MAP[p.monsterId].name.padEnd(12)} x=${s.x.toFixed(0).padStart(3)} sprite=${s.w.toFixed(0)}×${s.h.toFixed(0)}px`
+      + ` altura en pantalla=${(s.h / 960 * 100).toFixed(1)}% hueco con el anterior=${hueco}px piso=${p.dest}`);
+  });
+});
+
+// ¿Algún globo posible taparía una cara? Se prueban los 10 hablantes.
+console.log('\nBOCADILLOS (colocación real de anchorBubble para cada hablante):');
+let tapados = 0;
+for (const p of pax) {
+  const s = porId.get(p.id)!;
+  const texto = queueLineFor(p.monsterId, MONSTER_MAP[p.monsterId].kind, p.dest);
+  const ancla = { x: s.x, y: s.y, w: s.w, h: s.h };
+  const otras = pax.filter((q) => q.id !== p.id).map((q) => {
+    const r = porId.get(q.id)!;
+    return { x: r.x, y: r.y, w: r.w, h: r.h };
+  });
+  const pos = anchorBubble(ancla, bubbleBox(texto), otras);
+  const fuera = pos.x - bubbleBox(texto).w / 2 < 8 || pos.x + bubbleBox(texto).w / 2 > 532
+    || pos.y - bubbleBox(texto).h / 2 < 108;
+  let tapa = '';
+  for (const o of otras) {
+    const box = bubbleBox(texto);
+    const solapaX = Math.abs(o.x - pos.x) < (o.w + box.w) / 2;
+    const caraTop = o.y - o.h / 2;
+    const caraBot = o.y - o.h * 0.1;
+    const solapaY = pos.y + box.h / 2 > caraTop && pos.y - box.h / 2 < caraBot;
+    if (solapaX && solapaY) tapa = ' TAPA UNA CARA';
+  }
+  if (fuera || tapa) tapados += 1;
+  console.log(`   ${MONSTER_MAP[p.monsterId].name.padEnd(12)} globo en (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`
+    + `${fuera ? ' FUERA DE PANTALLA' : ''}${tapa}`);
+}
+console.log(tapados === 0 ? '   → ningún globo se sale ni tapa una cara' : `   → ${tapados} problemas`);
+
+console.log('\nImágenes generadas en docs/imagenes/:');
+informes.forEach((i) => console.log('   ' + i));
