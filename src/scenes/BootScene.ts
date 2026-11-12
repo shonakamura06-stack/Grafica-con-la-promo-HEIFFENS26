@@ -740,6 +740,39 @@ const DRAWERS: Record<string, (g: G, mood: Mood) => void> = {
   },
 };
 
+/**
+ * VOLUMEN 2.5D GENÉRICO (Sprint 2.2): luz cenital, sombra en la base y brillo
+ * especular, pintados SOBRE la silueta ya dibujada con `source-atop` (nunca se
+ * sale del personaje). Los diseños, colores y siluetas no se tocan: esto es un
+ * acabado de iluminación común a los 20 monstruos y a sus 90 texturas.
+ */
+function volumen25D(scene: Phaser.Scene, tmp: string, key: string): void {
+  const ct = scene.textures.createCanvas(key, T, T);
+  if (!ct) throw new Error(`no se pudo crear el canvas de la textura ${key}`);
+  ct.drawFrame(tmp);
+  const c2 = ct.getContext();
+  c2.globalCompositeOperation = 'source-atop';
+  let gr = c2.createRadialGradient(T * 0.38, T * 0.32, 6, T * 0.5, T * 0.58, T * 0.66);
+  gr.addColorStop(0, 'rgba(255,255,255,0.28)');
+  gr.addColorStop(0.55, 'rgba(255,255,255,0.06)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  c2.fillStyle = gr;
+  c2.fillRect(0, 0, T, T);
+  gr = c2.createRadialGradient(T * 0.5, T * 1.05, 10, T * 0.5, T * 0.78, T * 0.6);
+  gr.addColorStop(0, 'rgba(43,20,64,0.20)');
+  gr.addColorStop(1, 'rgba(43,20,64,0)');
+  c2.fillStyle = gr;
+  c2.fillRect(0, 0, T, T);
+  c2.globalAlpha = 0.45;
+  c2.fillStyle = '#ffffff';
+  c2.beginPath();
+  c2.ellipse(T * 0.36, T * 0.28, 8, 5, -0.5, 0, Math.PI * 2);
+  c2.fill();
+  c2.globalAlpha = 1;
+  ct.refresh();
+  scene.textures.remove(tmp);
+}
+
 export default class BootScene extends Phaser.Scene {
   constructor() {
     super('boot');
@@ -759,8 +792,10 @@ export default class BootScene extends Phaser.Scene {
         const g = this.add.graphics();
         DRAWERS[m.id](g, mood);
         const key = mood === 'happy' ? `monster-${m.id}` : `monster-${m.id}-${mood}`;
-        g.generateTexture(key, T, T);
+        const tmp = `__vol-${key}`;
+        g.generateTexture(tmp, T, T);
         g.destroy();
+        volumen25D(this, tmp, key);
       }
     }
 
@@ -771,8 +806,10 @@ export default class BootScene extends Phaser.Scene {
       BLINK = blink; GAZE = gaze;
       const g = this.add.graphics();
       DRAWERS[id](g, 'happy');
-      g.generateTexture(`monster-${id}-${sufijo}`, T, T);
+      const tmp = `__vol-monster-${id}-${sufijo}`;
+      g.generateTexture(tmp, T, T);
       g.destroy();
+      volumen25D(this, tmp, `monster-${id}-${sufijo}`);
       BLINK = false; GAZE = 0;
     };
     for (const id of BLINK_IDS) variante(id, 'blink', true, 0);

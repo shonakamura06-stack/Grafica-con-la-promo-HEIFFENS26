@@ -18,8 +18,7 @@ import {
   layoutQueue, QUEUE_AREA, spriteSize, slotsById, overlapsInRow, outOfArea, QueueItem,
 } from '../src/systems/queueLayout';
 import {
-  BubbleDirector, PRIORITY, bubbleBox, wrapText, shorten, anchorBubble, BUBBLE_OPTIONS, Anchor,
-} from '../src/systems/bubbles';
+  BubbleDirector, PRIORITY, bubbleBox, wrapText, shorten, anchorBubble, BUBBLE_OPTIONS, Anchor, protectedRect } from '../src/systems/bubbles';
 import { personalityOf, FX_LIMITS } from '../src/systems/personality';
 
 const TEXTURA = 128;
@@ -333,11 +332,15 @@ describe('posición del globo: cerca del personaje y dentro de la pantalla', () 
     const caja = bubbleBox('¡Subo yo primero!');
     const quien: Anchor = { x: 200, y: 880, w: 64, h: 64 };
     const vecino: Anchor = { x: 205, y: 830, w: 64, h: 64 };   // justo delante, más arriba
-    const libre = anchorBubble(quien, caja, []);
     const esquivando = anchorBubble(quien, caja, [vecino]);
-    expect(esquivando.y + caja.h / 2, 'debería subir para no tapar la cara')
-      .toBeLessThanOrEqual(vecino.y - vecino.h / 2 + 0.001);
-    expect(esquivando.y).toBeLessThanOrEqual(libre.y);
+    // Ni la cara/etiqueta del vecino ni las del propio hablante quedan tapadas.
+    for (const a of [quien, vecino]) {
+      const r = protectedRect(a);
+      const toca = esquivando.x + caja.w / 2 > r.x1 && esquivando.x - caja.w / 2 < r.x2
+        && esquivando.y + caja.h / 2 > r.y1 && esquivando.y - caja.h / 2 < r.y2;
+      expect(toca, `no debe tapar al pasajero de (${a.x},${a.y})`).toBe(false);
+    }
+    expect(esquivando.zone).toBe('cerca');
   });
 
   it('con la cola de dos filas, el de atrás no tapa al de delante', () => {

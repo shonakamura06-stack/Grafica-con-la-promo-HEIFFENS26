@@ -8,6 +8,8 @@ import Phaser from 'phaser';
 import { audio } from './audio';
 
 export const FONT = 'Arial Black, Arial, sans-serif';
+/** Redonda infantil para los bocadillos (Sprint 2.2): legible y juguetona. */
+export const FONT_FUN = 'Baloo 2, Comic Sans MS, Chalkboard SE, Verdana, sans-serif';
 export const FONT_BODY = 'Arial, sans-serif';
 
 export const COLORS = {

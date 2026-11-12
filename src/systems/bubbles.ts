@@ -72,16 +72,26 @@ export interface BubbleOptions {
 export const BUBBLE_OPTIONS: BubbleOptions = {
   screenW: 540, screenH: 960, margin: 8, topLimit: 108,
   minGap: 320, speakerCooldown: 2200, staleAfter: 4200,
-  maxChars: 52, maxBubbleW: 330, maxBubbleH: 92,
+  maxChars: 44, maxBubbleW: 280, maxBubbleH: 76,
 };
 
-export interface BubbleEvent { kind: 'show' | 'hide'; req: BubbleRequest; x: number; y: number }
+export interface BubbleEvent {
+  kind: 'show' | 'hide';
+  req: BubbleRequest;
+  x: number;
+  y: number;
+  /** 'cerca' = junto al hablante · 'reserva' = banda superior de diálogo. */
+  zone?: 'cerca' | 'reserva';
+}
 
-/** Tamaño estimado del globo a partir del texto (Arial 17, ajuste a 250 px). */
+/**
+ * Tamaño estimado del globo a partir del texto (redonda infantil de 16 px,
+ * ajuste a 236 px). Sprint 2.2: globo compacto de cómic, no una estrella enorme.
+ */
 export function bubbleBox(text: string, opts: BubbleOptions = BUBBLE_OPTIONS): { w: number; h: number } {
-  const trozos = wrapText(text, 30);
-  const w = Math.min(opts.maxBubbleW, Math.max(...trozos.map((t) => t.length)) * 8.4 + 52);
-  const h = Math.min(opts.maxBubbleH, Math.max(58, trozos.length * 22 + 40));
+  const trozos = wrapText(text, 26);
+  const w = Math.min(opts.maxBubbleW, Math.max(...trozos.map((t) => t.length)) * 8.0 + 36);
+  const h = Math.min(opts.maxBubbleH, Math.max(44, trozos.length * 20 + 24));
   return { w, h };
 }
 
@@ -108,38 +118,69 @@ export function shorten(text: string, maxChars: number): string {
 }
 
 /**
- * Dónde colocar el globo: encima de la cabeza de quien habla, dentro de la
- * pantalla y sin tapar la cara de ningún otro pasajero.
+ * Rectángulo que el globo NO debe tapar nunca de un pasajero: su cara y su
+ * etiqueta (insignia de destino + corazón de pareja + rayo de enemigo).
+ * Sprint 2.2: la información del puzle manda sobre la conversación.
+ */
+export function protectedRect(a: Anchor): { x1: number; y1: number; x2: number; y2: number } {
+  return {
+    x1: a.x - a.w / 2 - 6,
+    y1: a.y - a.h / 2 - 58,          // por encima del corazón / rayo
+    x2: a.x + a.w / 2 + 6,
+    y2: a.y - a.h * 0.05,            // hasta media cara
+  };
+}
+
+function chocan(x: number, y: number, hw: number, hh: number,
+  r: { x1: number; y1: number; x2: number; y2: number }): boolean {
+  return x + hw > r.x1 && x - hw < r.x2 && y + hh > r.y1 && y - hh < r.y2;
+}
+
+/**
+ * Dónde colocar el globo, por este orden:
+ *  A) encima de la etiqueta de quien habla, si no tapa la de nadie;
+ *  B) a un lado de su cabeza (y C) al otro lado);
+ *  D) ZONA RESERVADA de diálogo: la banda superior bajo el HUD, que no
+ *     estorba a ningún pasajero ni al ascensor (se aparta de él si hace falta).
+ * Nunca se solapa con caras, insignias, símbolos de relación ni con los
+ * rectángulos extra que pase la escena (ascensor).
  */
 export function anchorBubble(
   speaker: Anchor, box: { w: number; h: number }, others: Anchor[], opts: BubbleOptions = BUBBLE_OPTIONS,
-): { x: number; y: number } {
-  const halfW = box.w / 2;
-  let x = speaker.x;
-  let y = speaker.y - speaker.h / 2 - box.h / 2 - 10;
+  extra: Anchor[] = [],
+): { x: number; y: number; zone: 'cerca' | 'reserva' } {
+  const hw = box.w / 2;
+  const hh = box.h / 2;
+  const minY = opts.topLimit + hh;
+  const protegidos = [...others, speaker, ...extra].map(protectedRect);
+  const libre = (x: number, y: number): boolean => protegidos.every((r) => !chocan(x, y, hw, hh, r));
+  const clampX = (x: number): number =>
+    Math.min(opts.screenW - opts.margin - hw, Math.max(opts.margin + hw, x));
 
-  // Dentro de la pantalla.
-  x = Math.min(opts.screenW - opts.margin - halfW, Math.max(opts.margin + halfW, x));
-  const minY = opts.topLimit + box.h / 2;
-  // Si al subir chocaría con el HUD, se pone al lado del personaje en vez de encima.
-  if (y < minY) {
-    y = Math.max(minY, speaker.y);
-    x = speaker.x + halfW + speaker.w / 2 + 6 > opts.screenW - opts.margin
-      ? speaker.x - halfW - speaker.w / 2 - 6
-      : speaker.x + halfW + speaker.w / 2 + 6;
-    x = Math.min(opts.screenW - opts.margin - halfW, Math.max(opts.margin + halfW, x));
+  // A) Encima de su propia etiqueta.
+  let x = clampX(speaker.x);
+  let y = speaker.y - speaker.h / 2 - 58 - hh - 6;
+  if (y >= minY && libre(x, y)) return { x, y, zone: 'cerca' };
+
+  // B) y C) A los lados de la cabeza, a la altura de los ojos.
+  y = Math.max(minY, speaker.y - speaker.h / 2 + 4);
+  const lado = speaker.x + hw + speaker.w / 2 + 8 > opts.screenW - opts.margin ? -1 : 1;
+  for (const l of [lado, -lado]) {
+    x = clampX(speaker.x + l * (hw + speaker.w / 2 + 8));
+    if (libre(x, y)) return { x, y, zone: 'cerca' };
   }
 
-  // Que no tape la cara de otro: se sube por encima de las cabezas que estorben.
-  for (const o of others) {
-    const solapaX = Math.abs(o.x - x) < (o.w + box.w) / 2;
-    const faceTop = o.y - o.h / 2;
-    const faceBottom = o.y - o.h * 0.1;
-    const solapaY = y + box.h / 2 > faceTop && y - box.h / 2 < faceBottom;
-    if (solapaX && solapaY) y = Math.max(minY, faceTop - box.h / 2 - 6);
+  // D) Zona reservada de diálogo (banda superior), apartada del ascensor.
+  y = minY;
+  x = clampX(speaker.x);
+  for (const e of extra) {
+    if (chocan(x, y, hw, hh, protectedRect(e))) {
+      x = e.x < opts.screenW / 2
+        ? clampX(opts.screenW * 0.75)
+        : clampX(opts.screenW * 0.25);
+    }
   }
-  y = Math.min(y, opts.screenH - opts.margin - box.h / 2);
-  return { x, y };
+  return { x, y, zone: 'reserva' };
 }
 
 /**
@@ -204,7 +245,7 @@ export class BubbleDirector {
    * Avanza el director. `anchors` da la posición actual de cada hablante (la cola se
    * recoloca constantemente, así que se calcula en el momento de mostrar).
    */
-  update(now: number, anchors: Map<number, Anchor>): BubbleEvent[] {
+  update(now: number, anchors: Map<number, Anchor>, extra: Anchor[] = []): BubbleEvent[] {
     const out: BubbleEvent[] = [];
 
     // 1. Ocultar el visible si ya cumplió su tiempo.
@@ -241,11 +282,11 @@ export class BubbleDirector {
       const otros: Anchor[] = [];
       for (const [id, a] of anchors) if (id !== req.speaker) otros.push(a);
       const pos = propio
-        ? anchorBubble(propio, box, otros, this.opts)
-        : { x: this.opts.screenW / 2, y: this.opts.topLimit + box.h / 2 + 40 };
+        ? anchorBubble(propio, box, otros, this.opts, extra)
+        : { x: this.opts.screenW / 2, y: this.opts.topLimit + box.h / 2 + 6, zone: 'reserva' as const };
       this.current = req;
       this.shownAt = now;
-      out.push({ kind: 'show', req, x: pos.x, y: pos.y });
+      out.push({ kind: 'show', req, x: pos.x, y: pos.y, zone: pos.zone });
     }
     return out;
   }

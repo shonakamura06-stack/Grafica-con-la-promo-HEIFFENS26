@@ -36,7 +36,7 @@ import {
 import { layoutQueue as computeQueueLayout, QUEUE_AREA, QueueSlot } from '../systems/queueLayout';
 import { BubbleDirector, PRIORITY, Anchor, BubblePriority } from '../systems/bubbles';
 import { InteractionDirector, ActorSnapshot, InteractionEvent } from '../systems/interactions';
-import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
+import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS, FONT_FUN } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
 import { RESE_VOICE } from '../data/reseVoice';
 import { settleLevel, settleChallenge, claimableMissions } from '../systems/economy';
@@ -64,6 +64,8 @@ interface Passenger {
   container: Phaser.GameObjects.Container;
   image: Phaser.GameObjects.Image;
   badge: Phaser.GameObjects.Container;
+  /** Sombra individual de apoyo en el suelo (Sprint 2.2). */
+  shadow: Phaser.GameObjects.Image;
   /** Escala base del sprite en su sitio actual (cola o cabina): el reposo multiplica sobre ella. */
   baseScale: number;
   /** Tamaño real del sprite en la cola, para la geometría y los bocadillos. */
@@ -124,6 +126,8 @@ const LOBBY_TOP = 700; // la planta baja (piso 0) empieza aquí
 const BUILD_BOTTOM = 780;
 const CAB_X = 337; // centro de la columna 3
 const CAB_W = 100;
+/** Fondo crema cálido del globo de cómic (Sprint 2.2). */
+const CREAM_BUBBLE = 0xfff6e8;
 const CAB_H = 90;
 const SHAFT_LEFT = 284;
 const SHAFT_RIGHT = 390;
@@ -1003,7 +1007,7 @@ export default class GameScene extends Phaser.Scene {
     this.crew.forEach((grp, i) => {
       const def = MONSTER_MAP[grp.monsterId];
       const container = this.add.container(0, 0).setDepth(10);
-      const shadow = this.add.image(0, 28, 'shadow').setScale(0.9);
+      const shadow = this.add.image(0, 28, 'shadow').setScale(0.9).setAlpha(0.9);
       const image = this.add
         .image(0, 0, `monster-${grp.monsterId}`)
         .setScale(this.queueScale({ def } as Passenger))
@@ -1018,25 +1022,27 @@ export default class GameScene extends Phaser.Scene {
       }
 
       // Insignia de destino con el color del piso
-      const badge = this.add.container(0, -38);
+      // Sprint 2.2: la insignia se APOYA en la cabeza (antes flotaba a 38 px) para
+      // que se lea como etiqueta de ESTE monstruo y no como ruido suelto.
+      const badge = this.add.container(0, -30);
       const badgeBg = this.add.graphics();
       badgeBg.fillStyle(floorColor(grp.dest), 1);
-      badgeBg.fillCircle(0, 0, 14);
-      badgeBg.lineStyle(3, 0xffffff, 1);
-      badgeBg.strokeCircle(0, 0, 14);
-      const badgeText = makeText(this, 0, 0, `${grp.dest}`, 17, '#ffffff');
+      badgeBg.fillCircle(0, 0, 11);
+      badgeBg.lineStyle(2.5, 0xffffff, 1);
+      badgeBg.strokeCircle(0, 0, 11);
+      const badgeText = makeText(this, 0, 0, `${grp.dest}`, 14, '#ffffff');
       badgeText.setShadow(0, 2, 'rgba(0,0,0,0.3)', 2, true, true);
       badge.add([badgeBg, badgeText]);
       container.add(badge);
 
       // Indicador de pareja: corazón rosa junto a la insignia
       if (this.coupleOf.has(i)) {
-        const heart = this.add.image(20, -38, 'heart').setScale(0.55);
+        const heart = this.add.image(-15, -45, 'heart').setScale(0.40).setAlpha(0.95);
         container.add(heart);
       }
       // Indicador de enemigo: rayo de enojo
       if (this.enemiesOf.has(i)) {
-        const bolt = this.add.image(-20, -38, 'sparkle').setScale(0.7).setTint(0xef4444);
+        const bolt = this.add.image(15, -45, 'sparkle').setScale(0.55).setTint(0xef4444).setAlpha(0.9);
         container.add(bolt);
       }
 
@@ -1045,7 +1051,7 @@ export default class GameScene extends Phaser.Scene {
       const rnd = () => Math.random();
       const pax: Passenger = {
         id: i, monsterId: grp.monsterId, def, dest: grp.dest, slots: grp.slots,
-        state: 'queue', asleep: false, mood: 'happy', container, image, badge,
+        state: 'queue', asleep: false, mood: 'happy', container, image, badge, shadow,
         baseScale: escala, w: MONSTER_TEXTURE * escala, h: MONSTER_TEXTURE * escala,
         pers, phase: idlePhase(i, grp.monsterId),
         blinkTimer: new EventTimer(pers.blink[0], pers.blink[1], 0, rnd),
@@ -1099,9 +1105,16 @@ export default class GameScene extends Phaser.Scene {
       p.row = sl.row;
       // Escala real del sprite en su hueco: la del juego × el ajuste de la cola.
       // El reposo y los bocadillos multiplican sobre ESTA cifra, no sobre la base.
-      p.baseScale = this.queueScale(p) * layout.fitScale;
+      // Sprint 2.2: la fila de atrás se dibuja un 6 % menor y con una tinta
+      // lavada (perspectiva atmosférica); la de delante, nítida y delante.
+      p.baseScale = this.queueScale(p) * layout.fitScale * (sl.row === 0 ? 0.94 : 1);
       p.w = MONSTER_TEXTURE * p.baseScale;
       p.h = MONSTER_TEXTURE * p.baseScale;
+      p.image.setTint(sl.row === 0 ? 0xe4dfef : 0xffffff);
+      // Sombra individual: bajo los pies y del ancho de CADA sprite.
+      p.shadow.setPosition(0, p.h / 2 - 4)
+        .setScale(0.92 * (p.w / 64), 0.8 * (sl.row === 0 ? 0.85 : 1))
+        .setAlpha(sl.row === 0 ? 0.75 : 0.9);
       // La fila de delante se dibuja por encima: perspectiva sin solapar cabezas.
       p.container.setDepth(sl.depth);
       // La insignia del piso no puede encogerse con el sprite: se quedaría ilegible.
@@ -1256,7 +1269,7 @@ export default class GameScene extends Phaser.Scene {
     this.tweens.killTweensOf(p.image);
     p.baseScale = this.queueScale(p);
     p.image.setScale(p.baseScale);
-    p.image.setAlpha(1).setAngle(0).setPosition(0, 0);
+    p.image.setAlpha(1).setAngle(0).setPosition(0, 0).setTint(0xffffff);
     this.setMood(p, p.mood === 'angry' ? 'angry' : 'happy');
     this.playMotion(p, 'slide');
     this.layoutQueue();
@@ -1667,70 +1680,94 @@ export default class GameScene extends Phaser.Scene {
       if (p.state === 'delivered' || !p.container.active) continue;
       anchors.set(p.id, this.anchorOf(p));
     }
-    for (const ev of this.bubbles.update(nowMs, anchors)) {
-      if (ev.kind === 'show') this.paintBubble(ev.req.text, ev.x, ev.y, ev.req.ttl);
+    // El ascensor es información del puzle: el globo nunca se le pone encima.
+    const cab = { x: this.cab.x, y: this.cab.y, w: CAB_W, h: CAB_H };
+    for (const ev of this.bubbles.update(nowMs, anchors, [cab])) {
+      if (ev.kind === 'show') this.paintBubble(ev.req.text, ev.x, ev.y, ev.req.ttl, ev.req.speaker);
       else this.hideBubble();
     }
   }
 
-  /** Oculta el globo de inmediato (pestaña oculta, pausa, diálogo de Rese, victoria). */
+  /**
+   * Oculta el globo con una salida rápida (escala + fundido). Si la escena está
+   * pausada o dormida los tweens no corren: ahí se oculta de inmediato para que
+   * no quede un globo fantasma colgado.
+   */
   private hideBubble(): void {
     this.bubbleTimer?.remove();
     this.tweens.killTweensOf(this.bubble);
-    this.bubble.setVisible(false);
+    if (this.paused || !this.sceneVisible) { this.bubble.setVisible(false); return; }
+    this.tweens.add({
+      targets: this.bubble, scale: 0.7, alpha: 0, duration: 140, ease: 'Quad.easeIn',
+      onComplete: () => this.bubble.setVisible(false).setAlpha(1),
+    });
   }
 
   /** Dibuja el globo único donde y con lo que ha decidido el director. */
-  private paintBubble(text: string, x: number, y: number, duration: number): void {
+  private paintBubble(text: string, x: number, y: number, duration: number, speaker: number): void {
     this.bubbleText.setText(text);
-    this.drawBubbleShape();
+    this.drawBubbleShape(this.bubbleTail(speaker, x, y));
     this.bubble.setPosition(x, y).setDepth(60).setVisible(true).setAlpha(1).setScale(0.6);
     this.bubbleText.setPosition(0, 0);
-    this.tweens.add({ targets: this.bubble, scale: 1, duration: 180, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: this.bubble, scale: 1, duration: 160, ease: 'Back.easeOut' });
     this.bubbleTimer?.remove();
     this.bubbleTimer = this.time.delayedCall(Math.max(500, duration), () => this.hideBubble());
   }
 
-  /** Forma cartoon del globo a partir del texto actual (picos, cola y sombra). */
-  private drawBubbleShape(): void {
-    const w = Math.min(320, this.bubbleText.width + 52);
-    const h = Math.max(58, this.bubbleText.height + 40);
-    this.bubbleBg.clear();
-    // Picos irregulares estilo cartoon (deterministas para que no parpadee)
-    const spikes = 16;
-    const pts: Phaser.Math.Vector2[] = [];
-    for (let i = 0; i < spikes * 2; i++) {
-      const a = (i / (spikes * 2)) * Math.PI * 2;
-      const jitter = ((i * 37) % 7) / 100;
-      const r = i % 2 === 0 ? 1 : 0.74 + jitter;
-      pts.push(new Phaser.Math.Vector2(Math.cos(a) * (w / 2) * r, Math.sin(a) * (h / 2) * r));
-    }
-    const tail = [
-      new Phaser.Math.Vector2(-w * 0.18, h * 0.28),
-      new Phaser.Math.Vector2(-w * 0.42, h * 0.62 + 22),
-      new Phaser.Math.Vector2(w * 0.02, h * 0.34),
+  /**
+   * Globo de cómic (Sprint 2.2): rectángulo redondeado de fondo crema, borde
+   * grueso limpio y una cola PEQUEÑA que apunta al hablante. Sustituye a la
+   * estrella de 16 picos del Sprint 2, que tapaba información del puzle.
+   */
+  private drawBubbleShape(tail: { dx: number; dy: number; len: number }): void {
+    const w = Math.min(280, this.bubbleText.width + 36);
+    const h = Math.max(44, this.bubbleText.height + 24);
+    const r = Math.min(20, h / 2);
+    const g = this.bubbleBg;
+    g.clear();
+    const { dx, dy, len } = tail;
+    const punta = { x: dx * (h / 2 + len), y: dy * (h / 2 + len) };
+    const base = { x: dx * (h / 2 - 8), y: dy * (h / 2 - 8) };
+    const px = -dy * 8;   // perpendicular: ancho de la base de la cola
+    const py = dx * 8;
+    const cola: Phaser.Math.Vector2[] = [
+      new Phaser.Math.Vector2(base.x + px, base.y + py),
+      new Phaser.Math.Vector2(punta.x, punta.y),
+      new Phaser.Math.Vector2(base.x - px, base.y - py),
     ];
-    // Sombra gris desplazada (cuerpo + cola)
-    const sh = pts.map((p) => new Phaser.Math.Vector2(p.x + 7, p.y + 9));
-    this.bubbleBg.fillStyle(0x8f96a8, 0.55);
-    this.bubbleBg.fillPoints(sh, true);
-    this.bubbleBg.fillPoints(tail.map((p) => new Phaser.Math.Vector2(p.x + 7, p.y + 9)), true);
-    // Cola con contorno
-    this.bubbleBg.fillStyle(0xffffff, 0.98);
-    this.bubbleBg.fillPoints(tail, true);
-    this.bubbleBg.lineStyle(5, 0x241640, 1);
-    this.bubbleBg.strokePoints(tail, true);
-    // Cuerpo con contorno grueso
-    this.bubbleBg.fillStyle(0xffffff, 0.98);
-    this.bubbleBg.fillPoints(pts, true);
-    this.bubbleBg.strokePoints(pts, true);
-    // Parche blanco para unir cola y cuerpo sin línea interior
-    this.bubbleBg.fillStyle(0xffffff, 1);
-    this.bubbleBg.fillPoints([
-      new Phaser.Math.Vector2(-w * 0.16, h * 0.26),
-      new Phaser.Math.Vector2(-w * 0.3, h * 0.44),
-      new Phaser.Math.Vector2(0, h * 0.32),
+    // Sombra suave desplazada (cuerpo y cola), mucho más ligera que antes.
+    g.fillStyle(0x8f96a8, 0.22);
+    g.fillRoundedRect(-w / 2 + 4, -h / 2 + 5, w, h, r);
+    g.fillPoints(cola.map((c) => new Phaser.Math.Vector2(c.x + 4, c.y + 5)), true);
+    // Cola con borde, cuerpo encima y parche para fundir la unión.
+    g.fillStyle(CREAM_BUBBLE, 0.98);
+    g.fillPoints(cola, true);
+    g.lineStyle(4, 0x241640, 1);
+    g.strokePoints(cola, true);
+    g.fillStyle(CREAM_BUBBLE, 0.98);
+    g.fillRoundedRect(-w / 2, -h / 2, w, h, r);
+    g.lineStyle(4, 0x241640, 1);
+    g.strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+    g.lineStyle(0, 0, 0);
+    g.fillStyle(CREAM_BUBBLE, 1);
+    g.fillPoints([
+      new Phaser.Math.Vector2(base.x + px * 0.9, base.y + py * 0.9),
+      new Phaser.Math.Vector2(base.x - px * 0.9, base.y - py * 0.9),
+      new Phaser.Math.Vector2(dx * (h / 2 + 4), dy * (h / 2 + 4)),
     ], true);
+  }
+
+  /** Dirección y largo de la cola: hacia la cabeza del hablante, acotada. */
+  private bubbleTail(speaker: number, x: number, y: number): { dx: number; dy: number; len: number } {
+    const p = this.passengers.find((q) => q.id === speaker && q.state !== 'delivered');
+    const a: Anchor | null = p ? this.anchorOf(p)
+      : speaker === -1 ? this.systemAnchor
+        : speaker === RESE_SPEAKER ? RESE_ANCHOR : null;
+    if (!a) return { dx: -0.35, dy: 1, len: 12 };
+    const vx = a.x - x;
+    const vy = a.y - a.h / 2 - 40 - y;
+    const d = Math.hypot(vx, vy) || 1;
+    return { dx: vx / d, dy: vy / d, len: Math.max(12, Math.min(90, d - 40)) };
   }
 
   /**
@@ -1787,11 +1824,12 @@ export default class GameScene extends Phaser.Scene {
   private createBubble(): void {
     this.bubbleBg = this.add.graphics();
     this.bubbleText = this.add.text(0, 0, '', {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '17px',
-      color: '#6b4423',
+      fontFamily: FONT_FUN,
+      fontSize: '16px',
+      color: '#4a2d18',
       align: 'center',
-      wordWrap: { width: 250 },
+      lineSpacing: 3,
+      wordWrap: { width: 236 },
     }).setOrigin(0.5);
     this.bubble = this.add.container(0, 0, [this.bubbleBg, this.bubbleText]).setVisible(false);
   }

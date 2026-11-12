@@ -82,7 +82,9 @@ export interface QueueLayout {
 
 /** Área por defecto: la banda inferior libre de UI (el panel de pisos termina en 782). */
 export const QUEUE_AREA: QueueArea = {
-  left: 14, right: 526, bottom: 948, top: 792, gap: 10, rowGap: 8, rowOverlap: 0.42,
+  // Sprint 2.2: las dos filas se separan más (rowGap 8→20) y la de atrás se
+  // eleva (rowOverlap 0.42→0.34) para que se distingan a simple vista.
+  left: 14, right: 526, bottom: 948, top: 792, gap: 10, rowGap: 20, rowOverlap: 0.34,
 };
 
 /** Ancho/alto del sprite de un monstruo en la cola. */

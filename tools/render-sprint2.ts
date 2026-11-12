@@ -38,7 +38,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { createCanvas } = require('@napi-rs/canvas') as typeof import('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas') as typeof import('@napi-rs/canvas');
 const { transformSync } = require('esbuild') as typeof import('esbuild');
 const { GIFEncoder, quantize, applyPalette } = require('gifenc') as {
   GIFEncoder: () => {
@@ -57,7 +57,7 @@ import { LEVELS } from '../src/data/levels';
 import { MONSTERS, MONSTER_MAP, floorColor } from '../src/data/monsters';
 import { buildCrew } from '../src/systems/rules';
 import { layoutQueue, QUEUE_AREA, spriteSize } from '../src/systems/queueLayout';
-import { bubbleBox, anchorBubble, wrapText } from '../src/systems/bubbles';
+import { bubbleBox, anchorBubble, wrapText, BUBBLE_OPTIONS } from '../src/systems/bubbles';
 import { personalityOf, idlePhase, hasBlink, hasGaze } from '../src/systems/personality';
 import { idleFrame } from '../src/systems/animator';
 import { queueLineFor } from '../src/data/voices';
@@ -264,6 +264,45 @@ const AUX = extraerAuxiliares();
 type Cara = 'open' | 'blink' | 'left' | 'right';
 const SPRITES = new Map<string, Canvas>();
 
+/**
+ * El mismo acabado 2.5D que `volumen25D` de BootScene (Sprint 2.2): luz cenital,
+ * sombra en la base y especular, recortados con `source-atop` a la silueta.
+ */
+function aplicarVolumen(canvas: Canvas): void {
+  const c2 = canvas.getContext('2d');
+  c2.globalCompositeOperation = 'source-atop';
+  let gr = c2.createRadialGradient(T * 0.38, T * 0.32, 6, T * 0.5, T * 0.58, T * 0.66);
+  gr.addColorStop(0, 'rgba(255,255,255,0.28)');
+  gr.addColorStop(0.55, 'rgba(255,255,255,0.06)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  c2.fillStyle = gr; c2.fillRect(0, 0, T, T);
+  gr = c2.createRadialGradient(T * 0.5, T * 1.05, 10, T * 0.5, T * 0.78, T * 0.6);
+  gr.addColorStop(0, 'rgba(43,20,64,0.20)');
+  gr.addColorStop(1, 'rgba(43,20,64,0)');
+  c2.fillStyle = gr; c2.fillRect(0, 0, T, T);
+  c2.globalAlpha = 0.45; c2.fillStyle = '#ffffff';
+  c2.beginPath(); c2.ellipse(T * 0.36, T * 0.28, 8, 5, -0.5, 0, TAU); c2.fill();
+  c2.globalAlpha = 1;
+  c2.globalCompositeOperation = 'source-over';
+}
+
+/** Tinta lavada de la fila de atrás (perspectiva atmosférica del juego). */
+const TINTADOS = new Map<string, Canvas>();
+function tintar(canvas: Canvas, hex: string): Canvas {
+  const clave = `${hex}|${canvas.width}`;
+  const cache = TINTADOS.get(clave + Object.prototype.toString.call(canvas));
+  void cache;
+  const c = createCanvas(canvas.width, canvas.height);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(canvas, 0, 0);
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = hex;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(canvas, 0, 0);
+  return c;
+}
+
 function sprite(monsterId: string, cara: Cara = 'open', mood = 'happy'): Canvas {
   const clave = `${monsterId}|${mood}|${cara}`;
   const existente = SPRITES.get(clave);
@@ -271,6 +310,7 @@ function sprite(monsterId: string, cara: Cara = 'open', mood = 'happy'): Canvas 
   setFace(cara === 'blink', cara === 'left' ? -1 : cara === 'right' ? 1 : 0);
   const canvas = renderizar(T, T, (g) => DRAWERS[monsterId](g, mood));
   setFace(false, 0);
+  aplicarVolumen(canvas);
   SPRITES.set(clave, canvas);
   return canvas;
 }
@@ -290,13 +330,23 @@ interface PaxVisual {
 
 function dibujarPasajero(
   ctx: SKRSContext2D, p: PaxVisual, x: number, y: number, t: number, cara: Cara = 'open',
+  fila = 1,
 ): void {
   const f = idleFrame(p.pers.idle, t, p.fase, p.pers.amp, p.pers.speed,
     p.pers.idle === 'mirror' ? 0.42 * p.pers.speed * TAU : 0);
-  const ancho = T * p.escala;
+  // Sprint 2.2: la fila de atrás va un 6 % menor y lavada, como en el juego.
+  const escala = p.escala * (fila === 0 ? 0.94 : 1);
+  const ancho = T * escala;
 
-  // Sombra (textura real 'shadow' 64×20, escala 0,9, en (0, 28) del contenedor).
-  if (AUX.shadow) ctx.drawImage(AUX.shadow, x - 32 * 0.9, y + 28 - 10 * 0.9, 64 * 0.9, 20 * 0.9);
+  // Sombra individual bajo LOS PIES y del ancho de cada sprite (como GameScene).
+  if (AUX.shadow) {
+    const sw = 64 * 0.92 * (ancho / 64);
+    const sh = 20 * 0.8 * (fila === 0 ? 0.85 : 1);
+    ctx.save();
+    ctx.globalAlpha = fila === 0 ? 0.75 : 0.9;
+    ctx.drawImage(AUX.shadow, x - sw / 2, y + ancho / 2 - 4 - sh / 2, sw, sh);
+    ctx.restore();
+  }
 
   // Sprite con el transform del reposo (posición, escala y ángulo reales).
   // Los fantasmas viven con alpha 0,9 en el juego (GameScene: `setAlpha(0.9)`).
@@ -304,38 +354,45 @@ function dibujarPasajero(
   ctx.globalAlpha = p.rule === 'ghost' ? 0.9 : 1;
   ctx.translate(x + f.dx, y + f.dy);
   ctx.rotate((f.angle * Math.PI) / 180);
-  const img = sprite(p.monsterId, cara === 'open' && !hasBlink(p.monsterId) ? 'open' : cara);
-  ctx.drawImage(img, (-T / 2) * p.escala * f.sx, (-T / 2) * p.escala * f.sy,
-    T * p.escala * f.sx, T * p.escala * f.sy);
+  let img = sprite(p.monsterId, cara === 'open' && !hasBlink(p.monsterId) ? 'open' : cara);
+  if (fila === 0) img = tintar(img, '#e4dfef');
+  ctx.drawImage(img, (-T / 2) * escala * f.sx, (-T / 2) * escala * f.sy,
+    T * escala * f.sx, T * escala * f.sy);
   ctx.restore();
 
-  // Insignia del destino: el contenedor la coloca en (0, -38) en píxeles de escena
-  // (NO escala con el sprite), con círculo r=14, anillo blanco de 3 y número de 17px.
-  const badgeY = y - 38;
+  // Etiqueta de destino APOYADA en la cabeza (r=11, anillo 2,5, número 14 px).
+  const badgeY = y - 30;
   ctx.save();
   ctx.beginPath();
-  ctx.arc(x, badgeY, 14, 0, TAU);
+  ctx.arc(x, badgeY, 11, 0, TAU);
   ctx.fillStyle = color(floorColor(p.dest));
   ctx.fill();
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2.5;
   ctx.strokeStyle = 'rgba(255,255,255,1)';
   ctx.stroke();
-  ctx.font = 'bold 17px sans-serif';
+  ctx.font = 'bold 14px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillText(`${p.dest}`, x, badgeY + 2);
+  ctx.fillText(`${p.dest}`, x, badgeY + 1.5);
   ctx.fillStyle = '#ffffff';
   ctx.fillText(`${p.dest}`, x, badgeY);
   ctx.restore();
 
-  // Corazón de pareja y rayo de enemigo (texturas y posiciones reales).
-  if (p.couple && AUX.heart) ctx.drawImage(AUX.heart, x + 20 - 12, badgeY - 12, 24, 24);
-
-  if (p.enemy) {
-    ctx.drawImage(destelloRojo(), x - 20 - 8.4, badgeY - 8.4, 16.8, 16.8);
-    void ancho;
+  // Símbolos de relación pequeños y flanqueando la etiqueta (menos ruido).
+  if (p.couple && AUX.heart) {
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(AUX.heart, x - 15 - 8.8, y - 45 - 8.8, 17.6, 17.6);
+    ctx.restore();
   }
+  if (p.enemy) {
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(destelloRojo(), x + 15 - 6.6, y - 45 - 6.6, 13.2, 13.2);
+    ctx.restore();
+  }
+  void ancho;
 }
 
 /** El destello de enemigo con el tinte rojo del juego (0xef4444), sin tocar el fondo. */
@@ -353,52 +410,53 @@ function destelloRojo(): Canvas {
   return c;
 }
 
-// ── Bocadillo con la forma REAL de GameScene.drawBubbleShape ─────────────────
-function dibujarGlobo(ctx: SKRSContext2D, x: number, y: number, texto: string): { w: number; h: number } {
-  // Métricas reales: Arial 17, ajuste a 250 px (se usa sans-serif: Arial no existe aquí).
-  ctx.font = '17px sans-serif';
-  const lineas = wrapText(texto, 30);
+// ── Bocadillo de cómic redondeado (réplica de GameScene.drawBubbleShape 2.2) ──
+function dibujarGlobo(
+  ctx: SKRSContext2D, x: number, y: number, texto: string,
+  tail: { dx: number; dy: number; len: number } = { dx: -0.35, dy: 1, len: 14 },
+): { w: number; h: number } {
+  // Métricas del juego: redonda infantil de 16 px, ajuste a 236 px.
+  ctx.font = 'bold 16px sans-serif';
+  const lineas = wrapText(texto, 26);
   const anchoTexto = Math.max(...lineas.map((l) => ctx.measureText(l).width));
-  const altoTexto = lineas.length * 20;
-  const w = Math.min(320, anchoTexto + 52);
-  const h = Math.max(58, altoTexto + 40);
-
+  const w = Math.min(280, anchoTexto + 36);
+  const h = Math.max(44, lineas.length * 20 + 24);
+  const r = Math.min(20, h / 2);
   const g = new Graphics(ctx);
+  const { dx, dy, len } = tail;
+  const punta = { x: dx * (h / 2 + len), y: dy * (h / 2 + len) };
+  const base = { x: dx * (h / 2 - 8), y: dy * (h / 2 - 8) };
+  const px = -dy * 8;
+  const py = dx * 8;
+  const cola = [
+    { x: base.x + px, y: base.y + py },
+    { x: punta.x, y: punta.y },
+    { x: base.x - px, y: base.y - py },
+  ];
   ctx.save();
   ctx.translate(x, y);
-  const spikes = 16;
-  const pts: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i < spikes * 2; i += 1) {
-    const a = (i / (spikes * 2)) * TAU;
-    const jitter = ((i * 37) % 7) / 100;
-    const r = i % 2 === 0 ? 1 : 0.74 + jitter;
-    pts.push({ x: Math.cos(a) * (w / 2) * r, y: Math.sin(a) * (h / 2) * r });
-  }
-  const tail = [
-    { x: -w * 0.18, y: h * 0.28 },
-    { x: -w * 0.42, y: h * 0.62 + 22 },
-    { x: w * 0.02, y: h * 0.34 },
-  ];
-  g.fillStyle(0x8f96a8, 0.55);
-  g.fillPoints(pts.map((p) => ({ x: p.x + 7, y: p.y + 9 })), true);
-  g.fillPoints(tail.map((p) => ({ x: p.x + 7, y: p.y + 9 })), true);
-  g.fillStyle(0xffffff, 0.98);
-  g.fillPoints(tail, true);
-  g.lineStyle(5, 0x241640, 1);
-  g.strokePoints(tail, true);
-  g.fillStyle(0xffffff, 0.98);
-  g.fillPoints(pts, true);
-  g.strokePoints(pts, true);
-  g.fillStyle(0xffffff, 1);
+  g.fillStyle(0x8f96a8, 0.22);
+  g.fillRoundedRect(-w / 2 + 4, -h / 2 + 5, w, h, r);
+  g.fillPoints(cola.map((c) => ({ x: c.x + 4, y: c.y + 5 })), true);
+  g.fillStyle(0xfff6e8, 0.98);
+  g.fillPoints(cola, true);
+  g.lineStyle(4, 0x241640, 1);
+  g.strokePoints(cola, true);
+  g.fillStyle(0xfff6e8, 0.98);
+  g.fillRoundedRect(-w / 2, -h / 2, w, h, r);
+  g.lineStyle(4, 0x241640, 1);
+  g.strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+  g.lineStyle(0, 0, 0);
+  g.fillStyle(0xfff6e8, 1);
   g.fillPoints([
-    { x: -w * 0.16, y: h * 0.26 },
-    { x: -w * 0.3, y: h * 0.44 },
-    { x: 0, y: h * 0.32 },
+    { x: base.x + px * 0.9, y: base.y + py * 0.9 },
+    { x: base.x - px * 0.9, y: base.y - py * 0.9 },
+    { x: dx * (h / 2 + 4), y: dy * (h / 2 + 4) },
   ], true);
-  ctx.font = '17px sans-serif';
+  ctx.font = 'bold 16px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#6b4423';
+  ctx.fillStyle = '#4a2d18';
   lineas.forEach((l, i) => ctx.fillText(l, 0, (i - (lineas.length - 1) / 2) * 20));
   ctx.restore();
   return { w, h };
@@ -406,21 +464,44 @@ function dibujarGlobo(ctx: SKRSContext2D, x: number, y: number, texto: string): 
 
 // ── Fondo esquemático (NO es el arte del hotel) ──────────────────────────────
 function fondoEsquematico(ctx: SKRSContext2D, w: number, h: number, y0: number): void {
-  ctx.fillStyle = '#fdf3e3';
+  // Pared con degradado cálido y molduras: ambiente de hotel de juguete.
+  const pared = ctx.createLinearGradient(0, 0, 0, h);
+  pared.addColorStop(0, '#ffe9c9');
+  pared.addColorStop(0.55, '#ffd9b0');
+  pared.addColorStop(1, '#f7c795');
+  ctx.fillStyle = pared;
   ctx.fillRect(0, 0, w, h);
-  // Suelo del vestíbulo con baldosas en perspectiva (aproximación del real).
-  ctx.fillStyle = '#f6dfc0';
-  ctx.fillRect(0, y0 + 780 - y0, w, h);
-  ctx.fillStyle = '#efcfa6';
-  ctx.fillRect(0, y0 + 780 - y0, w, 10);
-  for (let i = 0; i < 14; i += 1) {
-    ctx.strokeStyle = 'rgba(180,140,100,0.25)';
-    ctx.lineWidth = 2;
+  // Molduras y paneles de la pared (rectángulos redondeados suaves).
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  for (let i = 0; i < 4; i += 1) {
+    const px = 24 + i * 130;
     ctx.beginPath();
-    ctx.moveTo(i * (w / 13), y0 + 780 - y0);
+    (ctx as unknown as { roundRect: (x: number, y: number, ww: number, hh: number, rr: number) => void })
+      .roundRect(px, 712 - y0, 100, 58, 12);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(160,106,53,0.35)';
+  ctx.fillRect(0, 776 - y0, w, 6);
+  // Suelo de tablones con perspectiva suave y brillo central.
+  const suelo = ctx.createLinearGradient(0, 782 - y0, 0, h);
+  suelo.addColorStop(0, '#e8b078');
+  suelo.addColorStop(1, '#c98b52');
+  ctx.fillStyle = suelo;
+  ctx.fillRect(0, 782 - y0, w, h - (782 - y0));
+  ctx.strokeStyle = 'rgba(120,70,30,0.25)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 14; i += 1) {
+    ctx.beginPath();
+    ctx.moveTo(i * (w / 13), 782 - y0);
     ctx.lineTo(w / 2 + (i * (w / 13) - w / 2) * 1.5, h);
     ctx.stroke();
   }
+  const brillo = ctx.createRadialGradient(w / 2, 860 - y0, 20, w / 2, 860 - y0, 300);
+  brillo.addColorStop(0, 'rgba(255,240,200,0.35)');
+  brillo.addColorStop(1, 'rgba(255,240,200,0)');
+  ctx.fillStyle = brillo;
+  ctx.fillRect(0, 782 - y0, w, h - (782 - y0));
+  // Guía del área de cola (solo para lectura técnica, no existe en el juego).
   ctx.strokeStyle = 'rgba(120,90,60,0.35)';
   ctx.setLineDash([6, 6]);
   ctx.lineWidth = 1.5;
@@ -501,11 +582,33 @@ function imagenCola(zoom: number, conMedidas: boolean, conGlobo: boolean, t: num
     });
   }
 
-  const hablante = conGlobo ? orden.find((p) => p.monsterId === 'gordito') ?? orden[0] : null;
+  // Sprint 2.2: se elige como hablante al primero cuyo globo quepa JUNTO a él
+  // (zona 'cerca'); si a nadie le cabe, se usa la zona reservada y el recorte
+  // se extiende hacia arriba para que se vea.
+  const vis0 = (q: typeof slots.slots[number]): { x: number; y: number; w: number; h: number } => {
+    const k = q.row === 0 ? 0.94 : 1;
+    return { x: q.x, y: q.y, w: q.w * k, h: q.h * k };
+  };
+  const cab0 = { x: 270, y: 430, w: 100, h: 130 };
+  const fraseDe = (q: PaxVisual): string =>
+    queueLineFor(q.monsterId, MONSTER_MAP[q.monsterId].kind, q.dest);
+  let hablante: PaxVisual | null = null;
+  let posGlobo: { x: number; y: number; zone: 'cerca' | 'reserva' } | null = null;
+  let textoGlobo = '';
+  if (conGlobo) {
+    for (const cand of orden) {
+      const sc = porId.get(cand.id)!;
+      const otras = orden.filter((q) => q.id !== cand.id).map((q) => vis0(porId.get(q.id)!));
+      const texto = fraseDe(cand);
+      const pos = anchorBubble(vis0(sc), bubbleBox(texto), otras, BUBBLE_OPTIONS, [cab0]);
+      if (pos.zone === 'cerca') { hablante = cand; posGlobo = pos; textoGlobo = texto; break; }
+      if (!hablante) { hablante = cand; posGlobo = pos; textoGlobo = texto; }
+    }
+  }
   // Los pasajeros se dibujan sin el globo; el globo va después (depth 60 en el juego).
   for (const p of orden) {
     const s = porId.get(p.id)!;
-    dibujarPasajero(ctx, p, s.x, s.y - y0, t);
+    dibujarPasajero(ctx, p, s.x, s.y - y0, t, 'open', s.row);
     if (conMedidas) {
       ctx.strokeStyle = 'rgba(220,38,38,0.75)';
       ctx.lineWidth = 1;
@@ -514,17 +617,19 @@ function imagenCola(zoom: number, conMedidas: boolean, conGlobo: boolean, t: num
     }
   }
 
-  if (hablante && conGlobo) {
+  if (hablante && conGlobo && posGlobo) {
     const s = porId.get(hablante.id)!;
-    const texto = queueLineFor(hablante.monsterId, MONSTER_MAP[hablante.monsterId].kind, hablante.dest);
-    const ancla = { x: s.x, y: s.y, w: s.w, h: s.h };
-    const otras = orden.filter((p) => p.id !== hablante.id).map((p) => {
-      const q = porId.get(p.id)!;
-      return { x: q.x, y: q.y, w: q.w, h: q.h };
-    });
+    const texto = textoGlobo;
+    const ancla = vis0(s);
     const estimado = bubbleBox(texto);
-    const pos = anchorBubble(ancla, estimado, otras);
-    const real = dibujarGlobo(ctx, pos.x, pos.y - y0, texto);
+    const pos = posGlobo;
+    // Cola pequeña apuntando a la cabeza del hablante, como bubbleTail del juego.
+    const vx = ancla.x - pos.x;
+    const vy = ancla.y - ancla.h / 2 - 40 - pos.y;
+    const d = Math.hypot(vx, vy) || 1;
+    const real = dibujarGlobo(ctx, pos.x, pos.y - y0, texto,
+      { dx: vx / d, dy: vy / d, len: Math.max(12, Math.min(90, d - 40)) });
+    if (pos.zone === 'reserva') rotulo(ctx, 'zona reservada de diálogo', 6, 56, 11, '#15803d');
     if (conMedidas) {
       ctx.strokeStyle = 'rgba(22,163,74,0.9)';
       ctx.setLineDash([3, 3]);
@@ -651,10 +756,34 @@ informes.push(guardar(imagenCola(2, false, true, 0.7), `nivel${nivel}-con-globo.
 informes.push(guardar(imagenCola(2, true, true, 0.7), `nivel${nivel}-medidas.png`));
 informes.push(guardar(hojaCaras(), 'caras-20-monstruos.png'));
 
+// ── Comparación ANTES (Sprint 2) / DESPUÉS (Sprint 2.2) ──────────────────────
+const BANDA = 34;
+async function comparacion(archivoAntes: string, ahora: Canvas, nombre: string): Promise<string> {
+  const antes = await loadImage(resolve(SALIDA, 'antes', archivoAntes));
+  const canvas = createCanvas(ahora.width, BANDA * 2 + antes.height + ahora.height + 6);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f7efe2';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillStyle = '#8a4b00';
+  ctx.fillText('ANTES · Sprint 2', 16, 24);
+  ctx.drawImage(antes, 0, BANDA);
+  const y2 = BANDA + antes.height + 6;
+  ctx.fillStyle = '#15803d';
+  ctx.fillText('DESPUÉS · Sprint 2.2', 16, y2 + 24);
+  ctx.drawImage(ahora, 0, y2 + BANDA);
+  writeFileSync(resolve(SALIDA, nombre), canvas.toBuffer('image/png'));
+  return `${nombre} (${canvas.width}×${canvas.height})`;
+}
+
 const gif = gifReposo();
 const rutaGif = resolve(SALIDA, 'animaciones-reposo.gif');
 writeFileSync(rutaGif, gif.datos);
 informes.push(`animaciones-reposo.gif (${gif.ancho}×${gif.alto}, ${gif.fps} fps, ${(gif.datos.length / 1024).toFixed(0)} kB)`);
+informes.push(await comparacion('nivel30-zona-espera.png', imagenCola(2, false, false, 2.1), 'comparacion-zona-espera.png'));
+informes.push(await comparacion('nivel30-con-globo.png', imagenCola(2, false, true, 0.7), 'comparacion-globo.png'));
 
 // ── Informe numérico de lo que se ve ────────────────────────────────────────
 const porId = new Map(slots.slots.map((s) => [s.id, s]));

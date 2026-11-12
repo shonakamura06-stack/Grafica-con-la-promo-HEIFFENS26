@@ -680,3 +680,34 @@ niveles ni los cronómetros, no se ha eliminado contenido existente (las frases
 genéricas de `dialogues.ts` siguen ahí como reserva), el guardado
 `piso-equivocado-save-v1` no cambia de formato y las etiquetas de recuperación
 anteriores siguen en el repositorio.
+
+## Sprint 2.2 — Pulido visual (revisión del 2026-11-10)
+
+Veredicto de la revisión: conservar los 20 diseños, colores y siluetas; rediseñar los
+globos; ajustar la composición de la cola; mejorar la profundidad. Cambios:
+
+- **Globos** (`systems/bubbles.ts`, `GameScene.drawBubbleShape`): máx 280×76 px
+  (antes 330×92), texto ≤44 caracteres en líneas de ≤26; forma de cómic redondeada
+  (`fillRoundedRect` con radio h/2, borde 4 px, fondo crema `0xfff6e8`), cola pequeña
+  (12–90 px) que apunta al hablante, entrada 160 ms y salida 140 ms. Anclaje nuevo:
+  nunca pisa `protectedRect` (cara + etiqueta de destino + símbolos) de ningún
+  pasajero ni el rectángulo del ascensor; si no hay hueco junto al hablante usa la
+  BANDA RESERVADA bajo el HUD (`topLimit`). `tests/bubbles.test.ts` lo comprueba en
+  los 30 niveles para cada hablante posible y con dos frases distintas.
+- **Cola** (`systems/queueLayout.ts`): `rowGap` 8→20 y `rowOverlap` 0.42→0.34 (la fila
+  de atrás sube y se separa). En `GameScene`, la fila de atrás se dibuja al 94 % con
+  tinta lavada `0xe4dfef` y cada pasajero apoya una sombra individual a los pies,
+  proporcional a su propio sprite.
+- **Etiquetas**: insignia de destino r=11 apoyada en la cabeza (0,−30 px); corazón
+  (−15,−45) y rayo (15,−45) reducidos: menos ruido y asociación clara por monstruo.
+- **Volumen 2.5D** (`BootScene.volumen25D`): luz cenital, sombra basal y brillo
+  especular pintados con `source-atop` sobre canvas temporal, aplicados a las 90
+  texturas SIN tocar los `DRAWERS` (la identidad no cambia).
+- **Sin verificar dentro de Phaser** (no hay navegador en el entorno): acabado WebGL,
+  audio y sensación de tweens en escena. `tools/render-sprint2.ts` replica lo anterior
+  (tinte, sombras, etiqueta, globo y fachada esquemática) para las capturas y genera
+  también `comparacion-zona-espera.png` y `comparacion-globo.png` contra las copias de
+  `docs/imagenes/antes/`.
+
+Pruebas: **369** (333 + 36 de bocadillos). `tsc --noEmit` y `vite build` limpios.
+Economía V3, reglas, solver, cronómetros, niveles y guardado: sin cambios.
