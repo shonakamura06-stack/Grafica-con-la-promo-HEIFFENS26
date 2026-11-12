@@ -667,7 +667,7 @@ Etiqueta previa conservada: `opcionB/821bed3-tiempo-definitivo`
   **Eso verifica que el código está, no que se ejecute bien**: un `playMotion` mal
   escrito pasaría estas pruebas y se vería mal en pantalla.
 - No se ha tocado ni medido el `sw.js` ni el manifiesto: el bundle creció de 1,88 MB
-  a 1,93 MB (1 929 621 bytes; gzip 460,89 kB) y sigue sin code-splitting (aviso de
+  a 1,93 MB (1 929 418 bytes; gzip 460,83 kB) y sigue sin code-splitting (aviso de
   Vite incluido). Las 30 texturas de cara nuevas (~0,5 MB de memoria de texturas)
   no pesan en el bundle: se generan en el arranque, no se descargan.
 
