@@ -645,9 +645,10 @@ function guardar(canvas: Canvas, nombre: string): string {
 }
 
 const informes: string[] = [];
-informes.push(guardar(imagenCola(2, false, true, 0.7), `nivel${nivel}-zona-espera.png`));
+// La captura principal es la limpia; el globo y las cotas van en variantes aparte.
+informes.push(guardar(imagenCola(2, false, false, 2.1), `nivel${nivel}-zona-espera.png`));
+informes.push(guardar(imagenCola(2, false, true, 0.7), `nivel${nivel}-zona-espera-con-globo.png`));
 informes.push(guardar(imagenCola(2, true, true, 0.7), `nivel${nivel}-zona-espera-medidas.png`));
-informes.push(guardar(imagenCola(2, false, false, 2.1), `nivel${nivel}-zona-espera-fila2.png`));
 informes.push(guardar(hojaCaras(), 'caras-20-monstruos.png'));
 
 const gif = gifReposo();
