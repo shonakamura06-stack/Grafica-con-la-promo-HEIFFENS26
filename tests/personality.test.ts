@@ -471,6 +471,21 @@ describe('animaciones puntuales: cortas, acotadas y sin bucles infinitos', () =>
     }
   });
 
+  it('ningún par de monstruos comparte TODA su firma de movimiento', () => {
+    // Dos personajes pueden respirar igual, pero no pueden entrar, salir y tener la
+    // misma manía: si no, son el mismo muñeco con otro color.
+    const firmas = new Map<string, string>();
+    for (const id of IDS) {
+      const p = personalityOf(id);
+      const f = `${p.idle}|${p.board}|${p.exit}|${p.quirks.join(',')}`;
+      if (firmas.has(f)) {
+        expect.fail(`${id} y ${firmas.get(f)} se mueven exactamente igual (${f})`);
+      }
+      firmas.set(f, id);
+    }
+    expect(firmas.size).toBe(20);
+  });
+
   it('los 5 prioritarios entran y salen de forma DISTINTA entre ellos', () => {
     const gestos = PRIORITY_IDS.map((id) => {
       const p = personalityOf(id);

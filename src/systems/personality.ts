@@ -198,12 +198,12 @@ export const PERSONALITIES: Record<string, Personality> = {
   pegajin: {
     id: 'pegajin', trait: 'Se estira hacia Pegajón y vuelve pegajoso a su sitio.',
     idle: 'wobble', amp: 4.2, speed: 1.0, blink: [2, 4.4], gaze: [2.4, 6],
-    sfx: 'slime', sfxEvery: 12, board: 'squeeze', exit: 'hop', quirks: ['mirror', 'hug'],
+    sfx: 'slime', sfxEvery: 12, board: 'hop', exit: 'dash', quirks: ['mirror', 'hug'],
   },
   pegajon: {
     id: 'pegajon', trait: 'Onda lenta: sigue a Pegajín con un compás de retraso.',
     idle: 'wobble', amp: 3.6, speed: 0.82, blink: [2.4, 5], gaze: [3, 7],
-    sfx: 'slime', sfxEvery: 13, board: 'squeeze', exit: 'hop', quirks: ['hug'],
+    sfx: 'slime', sfxEvery: 13, board: 'slide', exit: 'waddle', quirks: ['hug'],
   },
   temblorin: {
     id: 'temblorin', trait: 'Tiembla más cuanto más llena está la cabina.',

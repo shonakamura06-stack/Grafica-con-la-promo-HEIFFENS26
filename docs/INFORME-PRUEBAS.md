@@ -2,7 +2,7 @@
 
 Fecha: 2026-11-10 · Versión del juego: 1.1.0 (renovación visual kawaii pastel + drama de piso equivocado)
 
-> **Recuento vigente: 332 pruebas en 11 archivos, todas en verde** (`npm test`).
+> **Recuento vigente: 333 pruebas en 11 archivos, todas en verde** (`npm test`).
 > Las secciones siguientes son históricas y se conservan tal cual; lo que está en
 > vigor es la última actualización, «Sprint 2: personalidad e identidad de los 20
 > monstruos».
@@ -573,8 +573,8 @@ fuera de las pruebas), pero sí en la comprobabilidad del modelo.
 Fecha: 2026-11-10 · Punto de partida: commit `821bed3` (opción B cerrada) ·
 Etiqueta previa conservada: `opcionB/821bed3-tiempo-definitivo`
 
-> **332 pruebas en 11 archivos, todas en verde.** Se añaden 114 pruebas nuevas en
-> tres archivos (`personality.test.ts` 52, `queueLayout.test.ts` 35,
+> **333 pruebas en 11 archivos, todas en verde.** Se añaden 115 pruebas nuevas en
+> tres archivos (`personality.test.ts` 53, `queueLayout.test.ts` 35,
 > `identity.test.ts` 27). Las 218 anteriores siguen pasando sin cambios: la
 > personalidad no toca las reglas, la economía, los niveles ni los cronómetros.
 
@@ -638,6 +638,13 @@ Etiqueta previa conservada: `opcionB/821bed3-tiempo-definitivo`
     Detectado por `tsc` antes de commitear.
 11. **`thud()` (el pisotón del gigante) sonaba a volumen 0,30**, el doble que el
     techo declarado para los sonidos de personaje. Bajado a 0,16.
+
+12. **Pegajín y Pegajón se movían exactamente igual** (`wobble`/`squeeze`/`hop` los
+    dos): sólo los distinguía la amplitud (4,2 contra 3,6 px) y una manía. Un dúo es
+    justo el caso donde más se nota que son dos personajes distintos. Ahora Pegajín
+    entra saltando y sale disparado, y Pegajón entra deslizándose y sale
+    contoneándose. Se ha añadido una prueba que exige que **ningún par de los 20
+    comparta toda su firma de movimiento** (reposo + entrada + salida + manías).
 
 ### Lo que NO se ha podido comprobar (honestidad)
 
