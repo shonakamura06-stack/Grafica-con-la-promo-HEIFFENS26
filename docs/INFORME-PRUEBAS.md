@@ -2,9 +2,10 @@
 
 Fecha: 2026-11-10 · Versión del juego: 1.1.0 (renovación visual kawaii pastel + drama de piso equivocado)
 
-> **Recuento vigente: 203 pruebas en 8 archivos, todas en verde** (`npm test`).
+> **Recuento vigente: 218 pruebas en 8 archivos, todas en verde** (`npm test`).
 > Las secciones siguientes son históricas y se conservan tal cual; lo que está en
-> vigor es la última actualización, «Ajuste de diseño: variedad de destinos».
+> vigor es la última actualización, «Opción B: el reloj permite recuperarse de un
+> error grave».
 
 ## Pruebas automatizadas (Vitest) — ✅ 31/31 superadas
 
@@ -426,6 +427,8 @@ Notas para decidir:
   perder el nivel; **A** si se prefiere la campaña corta contando con que los reintentos son
   ilimitados y gratis. Se aplicará en cuanto se decida.
 
+**DECIDIDO: opción B** — implementada en la actualización siguiente.
+
 ### Honestidad
 
 - **No se ha abierto el juego en un navegador**: sigue sin haber navegador en este entorno.
@@ -438,3 +441,127 @@ Notas para decidir:
   criterios, no eligiendo a mano: hay cientos de repartos válidos por nivel y se han tomado los
   mejores. Si el juego se siente raro en algún piso, el reparto es ajustable sin romper nada
   (el `timeLimit` se recalcula solo).
+
+---
+
+## Actualización: OPCIÓN B — el reloj permite recuperarse de un error grave
+
+**Recuento vigente: 218 pruebas en 8 archivos, todas en verde.** `npx tsc --noEmit` limpio y
+`npm run build` correcto. Commit y etiqueta nuevos; se conservan `sprint1/87cf87c-jugabilidad-justa`,
+`ajuste-variedad/8ef37dd` y `recovery/797b7fb-pre-sprint1`.
+
+### Condiciones impuestas (y cómo se han cumplido)
+
+| Condición | Implementación |
+|---|---|
+| 2 errores normales **o** 1 error grave completo | `mistakesBudgetSeconds()` = el MAYOR de los dos |
+| Coste del error grave por el **peor caso medido**, no el promedio | `grumpyWorstCaseSeconds()` = **45,42 s** (el promedio era 43,1 s y no se usa) |
+| **+2 s de margen de seguridad** | `SAFETY_MARGIN = 2` → presupuesto **47,42 s** |
+| Cálculo **individual** por nivel | la `base` de cada nivel sigue siendo propia; `grumpyCostSeconds(nivel)` calcula el coste grave con SU cabina y SU piso medio y se comprueba uno a uno |
+| Conservar la posibilidad de equivocarse sin perder | holgura real 47,5–52,4 s en los 30 |
+| No tocar estrellas, monedas ni la Economía V3 | 5 pruebas nuevas en `tests/economy.test.ts` lo fijan |
+| Reintentos ilimitados y gratis | prueba nueva: 40 derrotas por tiempo no cuestan nada y el intento 41 puede ganar el nivel completo |
+
+El coste del error grave se ha leído de `GameScene.ts`, no se ha supuesto: `wrongFloor()` espera
+1400 ms (l.1188), baja a recepción (l.1189) y `grumpyExit()` saca a todos con retardo de 260 ms
+por monstruo (l.1200); el reloj corre durante toda la secuencia. Componentes en `GRUMPY`
+(`src/systems/timing.ts`): espera del globo, ida y vuelta al piso medio, salida escalonada,
+**volver a tocar a todos los que iban dentro** y rehacer el plan.
+
+### Los 30 tiempos definitivos
+
+`limpia` = partida sin errores (`expectedSeconds`); `grave` = coste del error grave de ESE nivel;
+`holgura` = límite − limpia; `norm`/`grav` = errores que aguanta el límite.
+
+| NV | limpia | grave | **límite** | holgura | norm | grav | NV | limpia | grave | **límite** | holgura | norm | grav |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 41,0 | 39,60 | **90** | 49,0 | 6 | 1 | 16 | 95,9 | 45,22 | **145** | 49,1 | 6 | 1 |
+| 2 | 58,3 | 39,67 | **110** | 51,7 | 6 | 1 | 17 | 95,0 | 44,38 | **145** | 50,0 | 6 | 1 |
+| 3 | 63,4 | 39,88 | **115** | 51,6 | 6 | 1 | 18 | 99,2 | 44,80 | **150** | 50,8 | 6 | 1 |
+| 4 | 64,9 | 40,55 | **115** | 50,1 | 6 | 1 | 19 | 91,6 | 44,90 | **140** | 48,4 | 6 | 1 |
+| 5 | 70,0 | 40,44 | **120** | 50,0 | 6 | 1 | 20 | 92,8 | 45,32 | **145** | 52,2 | 6 | 1 |
+| 6 | 70,0 | 40,30 | **120** | 50,0 | 6 | 1 | 21 | 92,7 | 45,22 | **145** | 52,3 | 6 | 1 |
+| 7 | 75,4 | 41,00 | **125** | 49,6 | 6 | 1 | 22 | 98,1 | 44,90 | **150** | 51,9 | 6 | 1 |
+| 8 | 88,1 | 40,84 | **140** | 51,9 | 6 | 1 | 23 | 100,0 | 45,22 | **150** | 50,0 | 6 | 1 |
+| 9 | 84,9 | 40,72 | **135** | 50,1 | 6 | 1 | 24 | 99,0 | 45,01 | **150** | 51,0 | 6 | 1 |
+| 10 | 96,6 | 40,24 | **145** | 48,4 | 6 | 1 | 25 | 105,9 | 44,59 | **155** | 49,1 | 6 | 1 |
+| 11 | 87,5 | 41,35 | **135** | 47,5 | 6 | 1 | 26 | 110,4 | 45,41 | **160** | 49,6 | 6 | 1 |
+| 12 | 102,6 | 40,83 | **155** | 52,4 | 6 | 1 | 27 | 122,2 | 45,32 | **170** | 47,8 | 6 | 1 |
+| 13 | 95,9 | 41,35 | **145** | 49,1 | 6 | 1 | 28 | 103,7 | 45,40 | **155** | 51,3 | 6 | 1 |
+| 14 | 101,0 | 45,32 | **150** | 49,0 | 6 | 1 | 29 | 127,4 | 44,90 | **175** | 47,6 | 6 | 1 |
+| 15 | 96,8 | 45,41 | **145** | 48,2 | 6 | 1 | 30 | 127,5 | 45,15 | **175** | 47,5 | 6 | 1 |
+
+```
+60 75 80 85 90 90 95 105 105 115 105 120 115 120 115 115 115 115 110 110 110 115 120 115 125 130 140 120 145 145   (Sprint 1 + variedad, Σ 3305 s)
+90 110 115 115 120 120 125 140 135 145 135 155 145 150 145 145 145 150 140 145 145 150 150 150 155 160 170 155 175 175  (OPCIÓN B, Σ 4255 s)
+```
+
+**CONDICIÓN 1** (2 errores normales en los 30): ✓ se cumple — holgura mínima 47,5 s frente a
+15,52 s necesarios. **CONDICIÓN 2** (1 error grave completo en los 30): ✓ se cumple — el coste
+grave propio más alto es 45,41 s (nv 15 y nv 26) y la holgura mínima es 47,5 s. El techo
+uniforme de 45,42 s cubre los 30 con 0,01 s de diferencia en el peor: por eso
+`GRUMPY.worstAvgFloor` se fijó en 4,12 (el valor medido real es 37/9 = 4,11) redondeando AL ALZA,
+y hay una prueba que falla si algún nivel se pasa del techo o si el techo se queda holgado.
+
+### Efecto sobre la duración de las partidas
+
+| Magnitud | Antes (variedad) | Opción B | Δ |
+|---|---|---|---|
+| Σ de límites (techo acumulado) | 3305 s · 55,1 min | **4255 s · 70,9 min** | +950 s · **+29 %** |
+| Media por nivel | 110,2 s | **141,8 s** | +31,6 s |
+| Nivel más largo | 145 s | **175 s** | +30 s |
+| Σ partidas limpias (duración REAL sin errores) | 2758 s · 46,0 min | **2758 s · 46,0 min** | **0** |
+
+La referencia de la opción B era ~68,9 min de techo y ~175 s de máximo: el máximo coincide
+exactamente y el acumulado sale 2 min por encima porque se ha usado el **peor caso + 2 s de
+seguridad** en todos los niveles en vez del coste propio de cada uno, como se pidió. Lo que de
+verdad dura una partida no cambia: el límite es un techo y quien juega bien termina en su
+`base`. Lo que cambia es que **quien se equivoca ya no pierde por tiempo**.
+
+### Pruebas nuevas (203 → 218)
+
+- `tests/timing.test.ts` (20 → **30**): bloque «OPCIÓN B: recuperarse de un error grave sin
+  perder el nivel» con 9 pruebas — el peor caso es el medido y no el promedio (y cubre los 30
+  sin pasarse de generoso), la fórmula incluye TODO lo que hace `GameScene` (falla si alguien
+  olvida la recolocación, que fue el error del primer estudio), el presupuesto es el mayor de
+  las dos condiciones + 2 s, **CONDICIÓN 1** nivel a nivel, **CONDICIÓN 2** nivel a nivel con el
+  coste propio de cada uno, las dos condiciones a la vez sobre el `timeLimit` guardado, que NO
+  se paga la opción C, y que ningún nivel pasa de 3 min ni la campaña de 75 min de techo.
+- `tests/economy.test.ts` (48 → **53**): bloque «el reloj NO entra en la economía» — las
+  estrellas dependen solo de movimientos (`starThresholds`/`starsFor`/`isPerfect`), no existe
+  ninguna recompensa por tiempo (`COIN_REWARDS` tiene exactamente las 4 claves de siempre y
+  `settleLevel` no recibe el tiempo), la misma jugada paga lo mismo, 40 derrotas por tiempo no
+  cuestan nada y el intento 41 puede ganar el nivel completo, y el techo del catálogo sigue en
+  `MAX_COINS = 2495`.
+- Se ha sustituido la cota «el límite < 2,2× la partida limpia»: estaba calibrada para el margen
+  viejo de 15,5 s y con 47,4 s la rompe el nivel 1 por diseño (90 s sobre 41 s = 2,20×, un ratio
+  fijo siempre penaliza a los niveles cortos). En su lugar se comprueba la suma real —el límite
+  es la partida limpia + el presupuesto + como mucho los 5 s del redondeo— y se añade un techo
+  de ratio (2,5) para que nadie regale minutos.
+
+### Un fallo menor del modelo que ha destapado esta prueba
+
+`LevelTiming.total` se publicaba redondeado a 0,1 s aunque su documentación decía «sin
+redondear». Con el presupuesto nuevo (47,42 s) algún nivel cae justo por encima de un múltiplo
+de 5 (150,004 s) y el valor redondeado (150,0) daba `recommended` = 150 en vez de 155: el modelo
+no se podía recalcular desde su propia salida. Ahora `total` se publica exacto y `base` y
+`mistakes` siguen redondeados para mostrar. No tiene efecto en el juego (nadie leía `total`
+fuera de las pruebas), pero sí en la comprobabilidad del modelo.
+
+### Honestidad
+
+- **No se ha abierto el juego en un navegador**: sigue sin haber navegador en este entorno. Los
+  45,42 s salen de leer `GameScene.ts` y valorar cada paso con `PACING`, no de cronometrar a
+  jugadores reales; si un niño tarda más en volver a tocar a cuatro monstruos, el margen de 2 s
+  puede quedarse corto. Es la hipótesis más sólida disponible sin playtesting.
+- El margen es uniforme (47,42 s) y el redondeo a múltiplos de 5 regala hasta 5 s: en los
+  niveles cortos eso hace que la holgura supere con creces su error grave propio (nv 1: 49,0 s
+  de holgura contra 39,60 s de coste). No se ha recortado a propósito —recortarlo habría
+  significado límites que no son múltiplos de 5.
+- Los límites ya NO son crecientes: nv 9 tiene 135 s y nv 8, 140 s, porque el límite sigue a la
+  `base` de cada nivel y nv 8 todavía paga 4 s de aprendizaje de interfaz. Es coherente con el
+  modelo, pero conviene saberlo si alguien esperaba una escalera.
+- `GRUMPY.worstCab` y `GRUMPY.worstAvgFloor` son constantes de la campaña ACTUAL. Si se añaden
+  niveles con cabinas de 5 o edificios donde todos quieran el ático, el techo uniforme se queda
+  corto: la prueba «el error grave se calcula con el PEOR caso medido» fallará y habrá que
+  recalcularlo. Está documentado en `docs/ANADIR-NIVELES.md`.

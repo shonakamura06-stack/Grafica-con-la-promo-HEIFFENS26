@@ -51,15 +51,24 @@ lo comprueba, igual que comprueba que el título no prometa un monstruo que no e
 `src/systems/timing.ts`: un presupuesto individual que suma leer la tarjeta,
 tocar a cada pasajero, pulsar el botón, puertas, viajes, salidas, despertar a
 Nocti, pensar entre viajes, aprender una regla nueva y reencuadrarse tras una
-avería, **más el margen para equivocarse dos veces**. Para obtenerlo:
+avería, **más el margen de errores**: el mayor entre 2 errores normales (15,52 s) y
+1 error grave completo —los 3 pisos equivocados seguidos que devuelven a todos a
+recepción— en su peor caso medido (45,42 s) más 2 s de seguridad. Para obtenerlo:
 
 ```bash
 npx vitest run tests/timing.test.ts   # falla y dice qué valor toca poner
 ```
 
 `tests/timing.test.ts` exige que el campo coincida EXACTAMENTE con el modelo y
-que ningún nivel baje de 2 errores tolerables. Si cambias el roster o los
-destinos de un nivel, su `timeLimit` cambia solo: no lo "redondees a ojo".
+comprueba las dos condiciones nivel a nivel: **2 errores normales** y **1 error grave
+completo** (`grumpyCostSeconds(nivel)`, con la cabina y el piso medio de ese nivel).
+Si cambias el roster o los destinos cambian su `base` y su coste de error grave, y su
+`timeLimit` se recalcula solo: no lo "redondees a ojo".
+
+Si añades niveles con edificios más altos o cabinas más grandes, revisa
+`GRUMPY.worstCab` y `GRUMPY.worstAvgFloor`: el techo uniforme del presupuesto debe
+seguir cubriendo el peor caso real. Hay una prueba que lo vigila y falla si algún
+nivel se pasa del techo o si el techo se queda holgado de más.
 
 ## La variedad manda sobre la curva monótona
 

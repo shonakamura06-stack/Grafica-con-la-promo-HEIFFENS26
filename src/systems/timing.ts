@@ -3,11 +3,18 @@
  *
  * De aquí salen los `timeLimit` de los 30 niveles. No son un multiplicador
  * arbitrario sobre una partida perfecta: son la suma de TODO lo que un niño hace
- * de verdad, más el margen para equivocarse dos veces.
+ * de verdad, más el margen para equivocarse.
  *
  * Principio de diseño (Sprint 1): la tensión la ponen las ESTRELLAS (eficiencia de
  * la ruta), nunca el cronómetro. El reloj solo existe para que una partida no se
  * alargue para siempre, no para castigar pensar.
+ *
+ * Principio de diseño (opción B, decisión de producto): **un error grave no puede
+ * convertir el nivel en una derrota automática**. Tres pisos equivocados seguidos
+ * devuelven a todos los monstruos a recepción y cuestan ~45 s de reloj; el margen
+ * de cada nivel cubre ese peor caso medido + 2 s de seguridad. El límite es un
+ * techo, no una duración: quien juega bien termina igual de rápido, así que esto
+ * solo alarga la partida de quien se equivoca, que es quien antes la perdía.
  *
  * Lo que NO consume reloj (comprobado en GameScene.ts:541, el tick del temporizador
  * se salta cuando alguna de estas condiciones es cierta):
@@ -21,7 +28,7 @@
  */
 
 import { LevelDef } from '../data/levels';
-import { PlanStep, SolveResult, computeOptimal } from './scoring';
+import { PlanStep, SolveResult, computeOptimal, MAX_MISTAKES } from './scoring';
 import { buildCrew, difficultyIndex } from './rules';
 
 /** Segundos de cada interacción real, medidos sobre las animaciones del juego. */
@@ -58,6 +65,81 @@ export function mistakeCostSeconds(): number {
     + PACING.doors;
 }
 
+/**
+ * El ERROR GRAVE, leído de `GameScene.ts` (no inventado):
+ * al llegar a `MAX_MISTAKES` (3) pisos equivocados SEGUIDOS —el contador se
+ * reinicia con cada entrega correcta— `wrongFloor()` avisa con un globo, espera
+ * 1400 ms (l.1188) y baja a recepción (l.1189); al llegar, `grumpyExit()` devuelve
+ * a TODOS a la cola con salida escalonada cada 260 ms (l.1200) y reinicia el
+ * contador. El jugador tiene que volver a tocarlos a todos y rehacer el viaje.
+ * El reloj NO se pausa en ningún momento de esa secuencia.
+ */
+export const GRUMPY = {
+  bubbleWait: 1.4,     // espera antes de que el ascensor baje (delayedCall(1400))
+  exitStagger: 0.26,   // retardo entre cada monstruo que sale de la cabina
+  /** Cabina más grande de la campaña (nv 14+): el peor caso lleva 4 dentro. */
+  worstCab: 4,
+  /**
+   * Piso medio más alto medido en los 30 niveles: nv 15 y nv 26, con 37/9 = 4,11.
+   * Se presupuesta 4,12 (redondeado AL ALZA) para que el techo uniforme cubra de
+   * verdad el peor nivel; `tests/timing.test.ts` comprueba nivel a nivel que ningún
+   * coste propio se pasa de él.
+   */
+  worstAvgFloor: 4.12,
+};
+
+/** Margen de seguridad añadido al peor error grave (decisión de producto). */
+export const SAFETY_MARGIN = 2;
+
+/**
+ * Coste del error grave EN UN NIVEL CONCRETO: sus 3 errores consecutivos, la espera
+ * del globo, bajar a recepción y volver a subir (ida y vuelta al piso medio de ese
+ * nivel), la salida escalonada, volver a tocar a todos los que iban dentro y rehacer
+ * el plan. Se usa para COMPROBAR que el presupuesto uniforme cubre los 30 casos.
+ */
+export function grumpyCostSeconds(level: LevelDef): number {
+  const dentro = Math.min(level.capacity, buildCrew(level).length);
+  const pisoMedio = level.passengers.reduce((a, p) => a + p.d, 0) / level.passengers.length;
+  return MAX_MISTAKES * mistakeCostSeconds()
+    + GRUMPY.bubbleWait
+    + 2 * pisoMedio * PACING.travelPerFloor
+    + (dentro - 1) * GRUMPY.exitStagger
+    + dentro * PACING.tapMonster
+    + PACING.thinkPerTrip;
+}
+
+/**
+ * Coste del PEOR error grave medido en la campaña (45,42 s), NO del promedio
+ * (43,1 s): se calcula con la geometría más cara que existe en el juego —cabina
+ * llena de 4 en un edificio cuyo piso medio es 4,12— para que un mismo margen sirva
+ * en los 30 niveles. `tests/timing.test.ts` comprueba que ninguno se pasa de él.
+ */
+export function grumpyWorstCaseSeconds(): number {
+  return MAX_MISTAKES * mistakeCostSeconds()
+    + GRUMPY.bubbleWait
+    + 2 * GRUMPY.worstAvgFloor * PACING.travelPerFloor
+    + (GRUMPY.worstCab - 1) * GRUMPY.exitStagger
+    + GRUMPY.worstCab * PACING.tapMonster
+    + PACING.thinkPerTrip;
+}
+
+/**
+ * Presupuesto de errores del reloj = el MAYOR de:
+ *   - 2 errores normales  (MISTAKES_ALLOWED × mistakeCostSeconds() = 15,52 s)
+ *   - 1 error grave completo en su peor caso medido + 2 s de margen de seguridad
+ *
+ * Es la opción B autorizada: permite DOS errores normales O UN error grave, pero
+ * no los dos a la vez (eso alargaría la campaña un 32 % y se descartó). Como el
+ * presupuesto de errores ya no depende del nivel, la parte individual de cada
+ * `timeLimit` sigue siendo su `base` (pasajeros, viajes, reglas, averías).
+ */
+export function mistakesBudgetSeconds(): number {
+  return Math.max(
+    MISTAKES_ALLOWED * mistakeCostSeconds(),
+    grumpyWorstCaseSeconds() + SAFETY_MARGIN,
+  );
+}
+
 export interface LevelTiming {
   /** Unidades que el jugador toca (los gemelos cuentan como 1 unidad y 2 criaturas). */
   crew: number;
@@ -85,8 +167,10 @@ export interface LevelTiming {
   breakdown: number;
   /** Partida limpia y lenta: todo lo anterior sumado. */
   base: number;
-  /** Margen para equivocarse MISTAKES_ALLOWED veces. */
+  /** Margen para equivocarse: cubre 2 errores normales O 1 error grave + seguridad. */
   mistakes: number;
+  /** Coste del error grave de ESTE nivel (su propia cabina y su propio piso medio). */
+  grumpyCost: number;
   /** base + mistakes, sin redondear. */
   total: number;
   /** Lo que debe poner levels.ts (total redondeado hacia arriba a 5 s). */
@@ -95,6 +179,8 @@ export interface LevelTiming {
   slack: number;
   /** Errores normales que aguanta ese límite (debe ser >= MISTAKES_ALLOWED). */
   errorsTolerated: number;
+  /** Errores GRAVES completos que aguanta ese límite (debe ser >= 1). */
+  grumpyTolerated: number;
   /** Índice de dificultad compartido con rules.ts. */
   difficulty: number;
 }
@@ -136,17 +222,22 @@ export function levelTiming(level: LevelDef, solve?: SolveResult): LevelTiming {
   const breakdown = level.breakdownChance * PACING.reorientAfterRepair;
 
   const base = read + taps + buttons + travel + exits + wakes + thinking + learning + breakdown;
-  const mistakes = MISTAKES_ALLOWED * mistakeCostSeconds();
+  const mistakes = mistakesBudgetSeconds();
   const total = base + mistakes;
   const recommended = Math.ceil(total / 5) * 5;
 
   const t: LevelTiming = {
     crew: crew.length, monsters, boards, moves, trips, optimal, sleepers,
     read, taps, buttons, travel, exits, wakes, thinking, learning, breakdown,
-    base: round1(base), mistakes: round1(mistakes), total: round1(total),
+    // base/mistakes se publican redondeados a 0,1 s (son para mostrar); `total` se
+    // publica EXACTO porque de él sale `recommended` y un total redondeado no permite
+    // recalcularlo (150,004 s redondeado a 150,0 daría 150 en vez de 155).
+    base: round1(base), mistakes: round1(mistakes), total,
+    grumpyCost: round1(grumpyCostSeconds(level)),
     recommended,
     slack: round1(recommended - base),
     errorsTolerated: Math.floor((recommended - base) / mistakeCostSeconds()),
+    grumpyTolerated: Math.floor((recommended - base) / grumpyCostSeconds(level)),
     difficulty: difficultyIndex(level, optimal, trips),
   };
   if (!solve) cache.set(level, t);

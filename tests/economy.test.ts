@@ -18,6 +18,7 @@ import {
   coinShopTotal, coinShopTotalWithBundle,
 } from '../src/systems/economy';
 import { SHOP_ITEMS, ALL_ITEMS, PACKS, CATEGORY_PRICE, itemById, DELUXE_ITEMS, DELUXE_EXTRAS } from '../src/data/shop';
+import { starThresholds, starsFor, isPerfect } from '../src/systems/scoring';
 import { MISSIONS } from '../src/data/missions';
 
 describe('campaña gratuita: sin energía ni esperas', () => {
@@ -612,5 +613,59 @@ describe('sin duplicación de monedas (auditoría combinada)', () => {
     expect(MAX_COINS).toBeGreaterThanOrEqual(coinShopTotalWithBundle());
     // 12 objetos de pago comprables con monedas (sin contar el paquete).
     expect(ALL_ITEMS.filter((i) => i.source === 'coins' && i.price > 0 && i.cat !== 'pack').length).toBe(12);
+  });
+});
+
+describe('el reloj NO entra en la economía (opción B: se subieron los límites, no los premios)', () => {
+  // La decisión de presupuestar 1 error grave sube los `timeLimit` de los 30 niveles.
+  // Estas pruebas fijan que ese cambio no ha tocado estrellas, monedas ni reintentos.
+
+  it('las estrellas dependen solo de los movimientos, nunca del tiempo', () => {
+    expect(starThresholds(20)).toEqual({ three: 21, two: 23 });
+    expect(starsFor(20, 20)).toBe(3);   // ruta perfecta
+    expect(starsFor(21, 20)).toBe(3);   // un movimiento de más
+    expect(starsFor(23, 20)).toBe(2);
+    expect(starsFor(24, 20)).toBe(1);
+    expect(isPerfect(20, 20)).toBe(true);
+    expect(isPerfect(21, 20)).toBe(false);
+  });
+
+  it('no existe ninguna recompensa por tiempo ni por acabar rápido', () => {
+    expect(Object.keys(COIN_REWARDS).sort())
+      .toEqual(['CHALLENGE_BADGE', 'FIRST_WIN', 'OPTIMAL', 'PER_STAR']);
+    // settleLevel(save, levelId, stars, distance, optimal, opts): el tiempo NO es entrada.
+    expect(settleLevel.length).toBe(5);
+  });
+
+  it('la misma jugada da las mismas monedas aunque el nivel tenga más tiempo', () => {
+    const rapido = defaultSave();
+    const lento = defaultSave();
+    const a = settleLevel(rapido, 12, 3, 19, 19, { mistakes: 0 });
+    const b = settleLevel(lento, 12, 3, 19, 19, { mistakes: 0 });
+    expect(a.total).toBe(b.total);
+    expect(rapido.coins).toBe(lento.coins);
+    expect(a.lines.map((l) => l.label)).toEqual(b.lines.map((l) => l.label));
+  });
+
+  it('perder por tiempo no cuesta nada: el reintento sigue siendo gratis e ilimitado', () => {
+    const s = defaultSave();
+    // 40 derrotas por tiempo agotado: solo se anota la métrica, no se liquida nada.
+    for (let i = 0; i < 40; i++) s.metrics.timeouts += 1;
+    expect(s.coins).toBe(0);
+    expect(s.completed[12]).toBeFalsy();
+    expect(s.stars[12] ?? 0).toBe(0);
+    // Y el reintento número 41 puede ganar el nivel completo, con óptimo incluido.
+    const r = settleLevel(s, 12, 3, 19, 19, {});
+    expect(r.firstWin).toBe(true);
+    expect(r.total).toBe(COIN_REWARDS.FIRST_WIN + COIN_REWARDS.PER_STAR * 3 + COIN_REWARDS.OPTIMAL);
+    expect(s.metrics.timeouts).toBe(40);
+  });
+
+  it('los límites nuevos no han creado monedas de la nada: el techo del catálogo sigue igual', () => {
+    expect(MAX_COINS).toBe(2495);
+    expect(COIN_REWARDS.FIRST_WIN).toBe(20);
+    expect(COIN_REWARDS.PER_STAR).toBe(5);
+    expect(COIN_REWARDS.OPTIMAL).toBe(10);
+    expect(COIN_REWARDS.CHALLENGE_BADGE).toBe(25);
   });
 });

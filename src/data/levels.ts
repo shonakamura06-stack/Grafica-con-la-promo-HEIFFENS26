@@ -18,8 +18,12 @@
  * 1) `timeLimit` es SIEMPRE `recommendedTimeLimit()` de src/systems/timing.ts:
  *    un presupuesto individual por nivel (leer la tarjeta, tocar a cada pasajero,
  *    pulsar el botón, puertas, viajes, salidas, despertar a Nocti, pensar entre
- *    viajes, aprender una regla nueva, reencuadrarse tras una avería) MÁS el margen
- *    para equivocarse dos veces. tests/timing.test.ts exige que coincida exactamente.
+ *    viajes, aprender una regla nueva, reencuadrarse tras una avería) MÁS un margen de
+ *    errores que cubre DOS errores normales O UN error grave completo (los tres pisos
+ *    equivocados seguidos que devuelven a todos a recepción), calculado con el PEOR
+ *    caso medido (45,42 s) más 2 s de seguridad — opción B autorizada.
+ *    tests/timing.test.ts exige que el campo coincida exactamente con el modelo y
+ *    comprueba las dos condiciones en los 30 niveles, uno a uno.
  *
  * 2) VARIEDAD antes que curva monótona: ningún nivel concentra a sus huéspedes en un
  *    solo piso para alargar la ruta. Todos usan al menos 4 pisos distintos (o todos
@@ -60,99 +64,99 @@ const P = (m: string, d: number): PassengerDef => ({ m, d });
 
 export const LEVELS: LevelDef[] = [
   // ── Niveles 1-5: aprendizaje de la mecánica básica ──────────────────────
-  { id: 1, title: 'Primera visita', floors: 2, capacity: 3, timeLimit: 60, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 1, title: 'Primera visita', floors: 2, capacity: 3, timeLimit: 90, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('bubu', 1), P('chispa', 2), P('bubu', 2),
   ]},
-  { id: 2, title: 'Sube, sube', floors: 3, capacity: 3, timeLimit: 75, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 2, title: 'Sube, sube', floors: 3, capacity: 3, timeLimit: 110, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('moco', 3), P('bubu', 1), P('chispa', 2), P('moco', 1),
   ]},
-  { id: 3, title: 'Día nublado', floors: 3, capacity: 3, timeLimit: 80, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 3, title: 'Día nublado', floors: 3, capacity: 3, timeLimit: 115, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('nube', 2), P('moco', 3), P('bubu', 3), P('chispa', 1), P('nube', 1),
   ]},
-  { id: 4, title: 'Noche de vampiros', floors: 4, capacity: 3, timeLimit: 85, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 4, title: 'Noche de vampiros', floors: 4, capacity: 3, timeLimit: 115, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('draculin', 4), P('nube', 1), P('moco', 2), P('bubu', 4), P('chispa', 3),
   ]},
-  { id: 5, title: 'Orejas grandes', floors: 4, capacity: 3, timeLimit: 90, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 5, title: 'Orejas grandes', floors: 4, capacity: 3, timeLimit: 120, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('rufi', 2), P('draculin', 1), P('nube', 4), P('moco', 4), P('bubu', 3), P('chispa', 2),
   ]},
   // ── Niveles 6-10: más pasajeros, más pisos y el primer huésped tímido ───
-  { id: 6, title: 'Doble Rufi', floors: 4, capacity: 3, timeLimit: 90, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 6, title: 'Doble Rufi', floors: 4, capacity: 3, timeLimit: 120, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('rufi', 4), P('rufi', 1), P('draculin', 3), P('nube', 2), P('moco', 1), P('chispa', 4),
   ]},
-  { id: 7, title: 'Glup glup', floors: 5, capacity: 3, timeLimit: 95, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 7, title: 'Glup glup', floors: 5, capacity: 3, timeLimit: 125, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('glup', 5), P('rufi', 2), P('draculin', 5), P('nube', 3), P('moco', 4), P('bubu', 1),
   ]},
-  { id: 8, title: 'Ola de burbujas', floors: 5, capacity: 3, timeLimit: 105, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 8, title: 'Ola de burbujas', floors: 5, capacity: 3, timeLimit: 140, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('glup', 1), P('glup', 4), P('chispa', 5), P('rufi', 3), P('nube', 5), P('moco', 2), P('draculin', 2),
   ]},
-  { id: 9, title: 'Un huésped tímido', floors: 5, capacity: 3, timeLimit: 105, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 9, title: 'Un huésped tímido', floors: 5, capacity: 3, timeLimit: 135, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('sombrin', 3), P('glup', 5), P('bubu', 1), P('nube', 2), P('chispa', 4), P('moco', 5), P('rufi', 1),
   ]},
-  { id: 10, title: 'Sombrín viaja solo', floors: 5, capacity: 3, timeLimit: 115, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 10, title: 'Sombrín viaja solo', floors: 5, capacity: 3, timeLimit: 145, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('sombrin', 5), P('sombrin', 1), P('glup', 1), P('draculin', 4), P('nube', 2), P('bubu', 3), P('chispa', 1),
   ]},
   // ── Niveles 11-14: turistas, VIP, parejas enamoradas y ascensor grande ──
-  { id: 11, title: '¡A hacer turismo!', floors: 5, capacity: 3, timeLimit: 105, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 11, title: '¡A hacer turismo!', floors: 5, capacity: 3, timeLimit: 135, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('turista', 4), P('glup', 5), P('rufi', 5), P('nube', 4), P('moco', 3), P('bubu', 3), P('chispa', 1), P('draculin', 5),
   ]},
-  { id: 12, title: 'Amor en el hotel', floors: 5, capacity: 3, timeLimit: 120, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
+  { id: 12, title: 'Amor en el hotel', floors: 5, capacity: 3, timeLimit: 155, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
     P('enamorado', 4), P('enamorado', 4), P('moco', 1), P('nube', 5), P('rufi', 4), P('glup', 3), P('draculin', 2), P('sombrin', 2),
   ]},
-  { id: 13, title: 'El señor VIP', floors: 5, capacity: 3, timeLimit: 115, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
+  { id: 13, title: 'El señor VIP', floors: 5, capacity: 3, timeLimit: 145, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
     P('enamorado', 5), P('enamorado', 5), P('vip', 3), P('turista', 2), P('bubu', 5), P('chispa', 5), P('moco', 1), P('nube', 4),
   ]},
-  { id: 14, title: 'Ascensor grande', floors: 5, capacity: 4, timeLimit: 120, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
+  { id: 14, title: 'Ascensor grande', floors: 5, capacity: 4, timeLimit: 150, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
     P('enamorado', 5), P('enamorado', 5), P('rufi', 2), P('nube', 5), P('moco', 5), P('bubu', 5), P('chispa', 2), P('glup', 3), P('nube', 4),
   ]},
   // ── Niveles 15-19: gigantes, enemigos, gemelos y huéspedes que se caen ──
-  { id: 15, title: 'Hora punta', floors: 5, capacity: 4, timeLimit: 115, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
+  { id: 15, title: 'Hora punta', floors: 5, capacity: 4, timeLimit: 145, breakdownChance: 0, couples: [[0,1]], enemies: [], passengers: [
     P('enamorado', 5), P('enamorado', 5), P('glup', 5), P('nube', 2), P('moco', 4), P('bubu', 5), P('chispa', 5), P('rufi', 3), P('glup', 3),
   ]},
-  { id: 16, title: '¡Cuidado, gigante!', floors: 5, capacity: 4, timeLimit: 115, breakdownChance: 0, couples: [], enemies: [], passengers: [
+  { id: 16, title: '¡Cuidado, gigante!', floors: 5, capacity: 4, timeLimit: 145, breakdownChance: 0, couples: [], enemies: [], passengers: [
     P('gordito', 5), P('bubu', 2), P('chispa', 5), P('moco', 5), P('nube', 5), P('rufi', 2), P('glup', 3), P('draculin', 4),
   ]},
-  { id: 17, title: 'No se soportan', floors: 5, capacity: 4, timeLimit: 115, breakdownChance: 0, couples: [], enemies: [[0,1]], passengers: [
+  { id: 17, title: 'No se soportan', floors: 5, capacity: 4, timeLimit: 145, breakdownChance: 0, couples: [], enemies: [[0,1]], passengers: [
     P('grunon', 5), P('chispa', 5), P('bubu', 1), P('moco', 3), P('nube', 1), P('rufi', 2), P('glup', 2), P('gordito', 4),
   ]},
-  { id: 18, title: 'Amor y gruñidos', floors: 5, capacity: 4, timeLimit: 115, breakdownChance: 0, couples: [[0,1]], enemies: [[2,3]], passengers: [
+  { id: 18, title: 'Amor y gruñidos', floors: 5, capacity: 4, timeLimit: 150, breakdownChance: 0, couples: [[0,1]], enemies: [[2,3]], passengers: [
     P('enamorado', 4), P('enamorado', 4), P('grunon', 2), P('bubu', 1), P('chispa', 4), P('moco', 4), P('nube', 3), P('sombrin', 5),
   ]},
-  { id: 19, title: 'Tímido y gemelos', floors: 5, capacity: 4, timeLimit: 110, breakdownChance: 0, couples: [], enemies: [[0,1]], passengers: [
+  { id: 19, title: 'Tímido y gemelos', floors: 5, capacity: 4, timeLimit: 140, breakdownChance: 0, couples: [], enemies: [[0,1]], passengers: [
     P('sombrin', 5), P('grunon', 5), P('gemelos', 4), P('gemelos', 4), P('bubu', 4), P('chispa', 2), P('moco', 3), P('nube', 1),
   ]},
   // ── Niveles 20-24: maletas, averías, sonámbulos, dúos y fantasmas ───────
-  { id: 20, title: 'Mucho equipaje', floors: 5, capacity: 4, timeLimit: 110, breakdownChance: 0.1, couples: [], enemies: [], passengers: [
+  { id: 20, title: 'Mucho equipaje', floors: 5, capacity: 4, timeLimit: 145, breakdownChance: 0.1, couples: [], enemies: [], passengers: [
     P('maletero', 5), P('bubu', 5), P('chispa', 5), P('moco', 2), P('nube', 3), P('rufi', 4), P('glup', 5), P('gordito', 3),
   ]},
-  { id: 21, title: 'El ascensor falla', floors: 5, capacity: 4, timeLimit: 110, breakdownChance: 0.35, couples: [[0,1]], enemies: [], passengers: [
+  { id: 21, title: 'El ascensor falla', floors: 5, capacity: 4, timeLimit: 145, breakdownChance: 0.35, couples: [[0,1]], enemies: [], passengers: [
     P('enamorado', 5), P('enamorado', 5), P('gordito', 5), P('bubu', 3), P('chispa', 2), P('moco', 5), P('nube', 4), P('glup', 2),
   ]},
-  { id: 22, title: 'Buenas noches, Nocti', floors: 5, capacity: 4, timeLimit: 115, breakdownChance: 0.15, couples: [], enemies: [[0,1]], passengers: [
+  { id: 22, title: 'Buenas noches, Nocti', floors: 5, capacity: 4, timeLimit: 150, breakdownChance: 0.15, couples: [], enemies: [[0,1]], passengers: [
     P('nocti', 3), P('grunon', 5), P('pegajin', 1), P('pegajon', 5), P('moco', 4), P('nube', 3), P('rufi', 2), P('sombrin', 5),
   ]},
-  { id: 23, title: 'Siesta colectiva', floors: 5, capacity: 4, timeLimit: 120, breakdownChance: 0.2, couples: [[1,2]], enemies: [], passengers: [
+  { id: 23, title: 'Siesta colectiva', floors: 5, capacity: 4, timeLimit: 150, breakdownChance: 0.2, couples: [[1,2]], enemies: [], passengers: [
     P('nocti', 5), P('enamorado', 5), P('enamorado', 5), P('sombrin', 5), P('bubu', 2), P('chispa', 4), P('moco', 1), P('nube', 4),
   ]},
-  { id: 24, title: 'Atraviesa paredes', floors: 5, capacity: 4, timeLimit: 115, breakdownChance: 0.2, couples: [], enemies: [[1,5]], passengers: [
+  { id: 24, title: 'Atraviesa paredes', floors: 5, capacity: 4, timeLimit: 150, breakdownChance: 0.2, couples: [], enemies: [[1,5]], passengers: [
     P('fantasmita', 3), P('grunon', 5), P('bubu', 1), P('chispa', 3), P('moco', 4), P('nube', 5), P('rufi', 3), P('sombrin', 5),
   ]},
   // ── Niveles 25-30: rompecabezas exigentes (todas las reglas combinadas) ─
-  { id: 25, title: 'Fantasma y gigante', floors: 5, capacity: 4, timeLimit: 125, breakdownChance: 0.25, couples: [[1,2]], enemies: [], passengers: [
+  { id: 25, title: 'Fantasma y gigante', floors: 5, capacity: 4, timeLimit: 155, breakdownChance: 0.25, couples: [[1,2]], enemies: [], passengers: [
     P('fantasmita', 4), P('enamorado', 1), P('enamorado', 1), P('gordito', 1), P('temblorin', 5), P('sombrin', 5), P('moco', 3), P('nube', 5),
   ]},
-  { id: 26, title: 'Todo junto', floors: 5, capacity: 4, timeLimit: 130, breakdownChance: 0.3, couples: [[0,1]], enemies: [[2,3]], passengers: [
+  { id: 26, title: 'Todo junto', floors: 5, capacity: 4, timeLimit: 160, breakdownChance: 0.3, couples: [[0,1]], enemies: [[2,3]], passengers: [
     P('enamorado', 5), P('enamorado', 5), P('grunon', 3), P('nocti', 4), P('fantasmita', 4), P('bubu', 1), P('chispa', 5), P('moco', 5), P('sombrin', 5),
   ]},
-  { id: 27, title: 'Noche en el hotel', floors: 5, capacity: 4, timeLimit: 140, breakdownChance: 0.3, couples: [[1,2]], enemies: [], passengers: [
+  { id: 27, title: 'Noche en el hotel', floors: 5, capacity: 4, timeLimit: 170, breakdownChance: 0.3, couples: [[1,2]], enemies: [], passengers: [
     P('nocti', 5), P('enamorado', 3), P('enamorado', 3), P('sombrin', 3), P('fantasmita', 5), P('gordito', 5), P('bubu', 4), P('chispa', 5), P('moco', 5), P('nube', 2),
   ]},
-  { id: 28, title: 'Peso pesado', floors: 5, capacity: 4, timeLimit: 120, breakdownChance: 0.35, couples: [[1,2]], enemies: [[2,3]], passengers: [
+  { id: 28, title: 'Peso pesado', floors: 5, capacity: 4, timeLimit: 155, breakdownChance: 0.35, couples: [[1,2]], enemies: [[2,3]], passengers: [
     P('gordito', 5), P('enamorado', 4), P('enamorado', 4), P('grunon', 4), P('pegajin', 4), P('pegajon', 3), P('moco', 5), P('nube', 5), P('rufi', 2), P('glup', 5),
   ]},
-  { id: 29, title: 'Dulces sueños', floors: 5, capacity: 4, timeLimit: 145, breakdownChance: 0.35, couples: [[1,2]], enemies: [[2,3]], passengers: [
+  { id: 29, title: 'Dulces sueños', floors: 5, capacity: 4, timeLimit: 175, breakdownChance: 0.35, couples: [[1,2]], enemies: [[2,3]], passengers: [
     P('sombrin', 5), P('enamorado', 2), P('enamorado', 2), P('grunon', 4), P('nocti', 4), P('fantasmita', 1), P('temblorin', 3), P('chispa', 5), P('moco', 4), P('nube', 5),
   ]},
-  { id: 30, title: '¡La gran noche!', floors: 5, capacity: 4, timeLimit: 145, breakdownChance: 0.4, couples: [[1,2]], enemies: [[2,3]], passengers: [
+  { id: 30, title: '¡La gran noche!', floors: 5, capacity: 4, timeLimit: 175, breakdownChance: 0.4, couples: [[1,2]], enemies: [[2,3]], passengers: [
     P('gordito', 5), P('enamorado', 3), P('enamorado', 3), P('grunon', 5), P('nocti', 5), P('fantasmita', 2), P('sombrin', 5), P('bubu', 1), P('chispa', 5), P('moco', 4),
   ]},
 ];

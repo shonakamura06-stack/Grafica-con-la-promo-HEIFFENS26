@@ -123,8 +123,9 @@ export interface BalanceResult {
  * Minutos promedio por nivel del perfil.
  *
  * Usa el tiempo REAL de una partida limpia y lenta (systems/timing.ts), no el
- * `timeLimit`: desde el Sprint 1 el límite incluye el margen para equivocarse dos
- * veces, así que tomarlo aquí sobreestimaría la duración de cada sesión y todo el
+ * `timeLimit`: desde el Sprint 1 el límite incluye el margen de errores (2 normales
+ * o 1 error grave completo), así que tomarlo aquí sobreestimaría la duración de cada
+ * sesión y todo el
  * informe de equilibrio saldría inflado. Las monedas NO dependen de este número
  * (salen de niveles, estrellas y misiones), así que la Economía V3 queda intacta.
  */

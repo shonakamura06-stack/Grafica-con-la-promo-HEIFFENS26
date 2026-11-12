@@ -171,17 +171,29 @@ seguidos, que toda caída se recupere en 5 niveles y que la tendencia a 8 nivele
   viajes (0,42 s por piso), salidas, despertar a Nocti (3 s de duda + 3 s de toque) y el
   tiempo de pensar (2,5 s por viaje) — más el aprendizaje de la primera vez que aparece una
   regla (8 s al principio, 4 s a partir del nivel 15), el reencuadre tras una avería (3 s) y
-  **el margen para equivocarse dos veces** (2 errores normales de 7,76 s = 15,5 s).
-  Nada de multiplicadores genéricos.
-- **Estudio pendiente de decisión (no aplicado)**: un *error grave* — tres pisos equivocados
-  seguidos, que devuelven a TODOS a recepción — cuesta de media **43 s** (los 3 errores, la
-  espera del globo, bajar, la salida escalonada, volver a tocarlos a todos y volver a subir),
-  mucho más de lo que cubre el margen actual. Presupuestar 1 error grave subiría los límites
-  de 3305 s a 4135 s (55 → 69 min de campaña, +25 %, media por nivel 110 → 138 s); añadir
-  además 1 error normal lo llevaría a 4365 s (+32 %). Cifra por cifra en
-  `docs/INFORME-PRUEBAS.md`. El límite es un techo: un jugador que no se equivoca termina en
-  el mismo tiempo, así que la decisión solo afecta a quien falla, y no toca estrellas ni
-  monedas. **No se ha cambiado nada sin presentarlo antes.** Se redondea a múltiplos de 5 y se guarda en el campo
+  **el margen de errores** (opción B, más abajo). Nada de multiplicadores genéricos.
+- **Margen de errores — OPCIÓN B (decisión de producto aplicada)**: cada nivel debe tolerar
+  **dos errores normales** (7,76 s cada uno) **o un error grave completo**, lo que sea mayor.
+  Un *error grave* son tres pisos equivocados SEGUIDOS (el contador se reinicia con cada
+  entrega correcta): `GameScene.wrongFloor()` avisa con un globo, espera 1,4 s, baja a
+  recepción y `grumpyExit()` devuelve a TODOS a la cola con salida escalonada cada 260 ms;
+  después hay que volver a tocarlos a todos y rehacer el viaje. El reloj no se pausa en
+  ningún momento de esa secuencia.
+  - El coste se calcula con el **peor caso medido, no con el promedio**: cabina llena (4) en
+    un edificio de piso medio 4,12 → **45,42 s** (los 30 niveles dan entre 39,60 y 45,41 s;
+    el promedio es 43,1 s y NO se usa).
+  - Se añaden **2 s de margen de seguridad** → presupuesto de errores de **47,42 s** por nivel.
+  - Se calcula **individualmente**: la parte propia de cada nivel sigue siendo su `base`
+    (pasajeros, viajes, reglas, averías); el margen de errores es uniforme porque el coste del
+    error grave depende de la geometría de la cabina y del edificio, no del número de huéspedes.
+  - **No se presupuesta "1 grave + 1 normal"** (opción C): habría llevado la campaña a 72,8 min
+    (+32 %) y se descartó por excesiva.
+  - Efecto: Σ de límites 3305 s → **4255 s** (55,1 → 70,9 min de techo, media por nivel
+    110,2 → 141,8 s, nivel más largo 145 → 175 s). **La duración real de una partida limpia NO
+    cambia**: Σ 2758 s = 46,0 min. El límite es un techo, no una duración: quien juega bien
+    termina igual de rápido.
+  - No toca estrellas (dependen de los movimientos), monedas (no existe premio por tiempo) ni
+    reintentos (siguen ilimitados y gratis). Comprobado por `tests/economy.test.ts`. Se redondea a múltiplos de 5 y se guarda en el campo
   `timeLimit`, que `tests/timing.test.ts` obliga a mantener igual que el modelo.
 - **El cronómetro NO corre mientras se repara ni mientras se lee**: `startTimer()` ya se
   detenía durante averías, diálogos de Rese y tutoriales. Con el Sprint 1 también se congela

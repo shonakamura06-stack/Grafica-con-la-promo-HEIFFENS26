@@ -30,8 +30,9 @@ src/
                              movimientos + reglas + cabina + viajes + variedad de
                              destinos + eventos). La usan EL MOTOR y EL SOLVER.
     timing.ts              ★ Presupuesto de tiempo por nivel (PACING): cuántos
-                             segundos cuesta jugar un nivel y cuántos se dan de
-                             margen para equivocarse dos veces.
+                             segundos cuesta jugar un nivel y el margen de errores
+                             (2 normales O 1 grave completo): grumpyCostSeconds,
+                             grumpyWorstCaseSeconds, GRUMPY, SAFETY_MARGIN.
     scoring.ts             Recorrido óptimo (Dijkstra sobre rules.ts) y estrellas
     economy.ts             Economía V3: monedas, recompensas, packs de demo
     cosmetics.ts           Cosméticos comprables y aplicación en escena
