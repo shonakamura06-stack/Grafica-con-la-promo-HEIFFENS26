@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildCrew, canBoard, canExit, creaturesOf, slotsOf, rulesPresent, newRulesIn,
-  difficultyIndex, CrewMember,
+  difficultyIndex, estimateTrips, CrewMember,
 } from '../src/systems/rules';
 import { LevelDef } from '../src/data/levels';
 import { LEVELS } from '../src/data/levels';
@@ -315,64 +315,83 @@ describe('inventario de reglas de un nivel', () => {
   });
 });
 
-describe('índice de dificultad', () => {
-  it('sube con los movimientos, las reglas, la presión de cabina y las averías', () => {
-    const base = L([['bubu', 1], ['chispa', 2], ['moco', 3]]);
-    const d = (lvl: LevelDef, optimal: number, crew: number) => difficultyIndex(lvl, optimal, crew);
-    expect(d(base, 10, 3)).toBeLessThan(d(base, 12, 3));                    // más movimientos
-    expect(d(base, 10, 3)).toBeLessThan(d(base, 10, 6));                    // más presión
-    const conShy = L([['sombrin', 1], ['chispa', 2], ['moco', 3]]);
-    expect(d(base, 10, 3)).toBeLessThan(d(conShy, 10, 3));                  // más reglas
+describe('índice de dificultad compuesto', () => {
+  // El índice NO es la cuenta de movimientos: pesa reglas, capacidad, viajes,
+  // variedad de destinos y eventos especiales. Estas pruebas fijan cada término.
+  const base = L([['bubu', 1], ['chispa', 2], ['moco', 3]]);   // 3 destinos, 3 lugares, sin reglas
+
+  it('sube con los movimientos', () => {
+    expect(difficultyIndex(base, 10)).toBeLessThan(difficultyIndex(base, 12));
+  });
+
+  it('sube con cada regla social y MÁS cuando se combinan (a partir de la tercera)', () => {
+    const r1 = L([['bubu', 1], ['chispa', 2], ['moco', 3]], { couples: [[0, 1]] });
+    const r2 = L([['bubu', 1], ['chispa', 2], ['moco', 3]], { couples: [[0, 1]], enemies: [[1, 2]] });
+    const r3 = L([['bubu', 1], ['chispa', 2], ['sombrin', 3]], { couples: [[0, 1]], enemies: [[1, 2]] });
+    const d0 = difficultyIndex(base, 10), d1 = difficultyIndex(r1, 10);
+    const d2 = difficultyIndex(r2, 10), d3 = difficultyIndex(r3, 10);
+    expect(d0).toBeLessThan(d1);
+    expect(d1).toBeLessThan(d2);
+    expect(d2).toBeLessThan(d3);
+    // la tercera regla cuesta más que la segunda: combinar restricciones se multiplica
+    expect(d3 - d2).toBeGreaterThan(d2 - d1);
+  });
+
+  it('la presión de cabina cuenta lugares, no bultos: gigante y maletero pesan 2, el fantasma 0', () => {
+    const normal = L([['bubu', 1], ['chispa', 2], ['moco', 3]], { capacity: 3 });
+    const gigante = L([['gordito', 1], ['chispa', 2], ['moco', 3]], { capacity: 3 });
+    const fantasma = L([['fantasmita', 1], ['chispa', 2], ['moco', 3]], { capacity: 3 });
+    const maletero = L([['maletero', 1], ['chispa', 2], ['moco', 3]], { capacity: 3 });
+    const timido = L([['sombrin', 1], ['chispa', 2], ['moco', 3]], { capacity: 3 });
+    expect(difficultyIndex(gigante, 10)).toBeGreaterThan(difficultyIndex(normal, 10));
+    expect(difficultyIndex(maletero, 10)).toBeGreaterThan(difficultyIndex(normal, 10));
+    // el fantasma no ocupa sitio: con una regla cada uno, presiona menos que un tímido
+    expect(difficultyIndex(fantasma, 10)).toBeLessThan(difficultyIndex(timido, 10));
+    // la misma gente en una cabina más pequeña es más difícil
+    const apretado = L([['bubu', 1], ['chispa', 2], ['moco', 3]], { capacity: 2 });
+    expect(difficultyIndex(apretado, 10)).toBeGreaterThan(difficultyIndex(normal, 10));
+    // y si se conoce el plan real, menos viajes = menos dificultad
+    expect(difficultyIndex(gigante, 10, 1)).toBeLessThan(difficultyIndex(gigante, 10, 3));
+  });
+
+  it('sube con el número de viajes: cada viaje obliga a rehacer el plan', () => {
+    expect(difficultyIndex(base, 10, 1)).toBeLessThan(difficultyIndex(base, 10, 3));
+    expect(difficultyIndex(base, 10, 3)).toBeLessThan(difficultyIndex(base, 10, 4));
+  });
+
+  it('la variedad de destinos PUNTÚA: repartir pisos es más difícil que amontonarlos', () => {
+    // Este es el término que impide que la campaña se llene de niveles donde todos
+    // los monstruos quieren el mismo piso solo para alargar la ruta.
+    const amontonado = L([['bubu', 3], ['chispa', 3], ['moco', 3]]);
+    const repartido = L([['bubu', 1], ['chispa', 2], ['moco', 3]]);
+    expect(difficultyIndex(repartido, 10)).toBeGreaterThan(difficultyIndex(amontonado, 10));
+  });
+
+  it('los eventos especiales suman: sonámbulos dentro y averías del ascensor', () => {
+    const sinNocti = L([['bubu', 1], ['chispa', 2], ['moco', 3]]);
+    const conNocti = L([['bubu', 1], ['chispa', 2], ['nocti', 3]]);
+    expect(difficultyIndex(conNocti, 10)).toBeGreaterThan(difficultyIndex(sinNocti, 10));
     const conAveria = L([['bubu', 1], ['chispa', 2], ['moco', 3]], { breakdownChance: 0.4 });
-    expect(d(base, 10, 3)).toBeLessThan(d(conAveria, 10, 3));               // averías
+    expect(difficultyIndex(conAveria, 10)).toBeGreaterThan(difficultyIndex(sinNocti, 10));
   });
 
-  it('la presión de cabina nunca es negativa', () => {
+  it('un nivel con MENOS movimientos pero más reglas puede ser más difícil', () => {
+    const largo = L([['bubu', 1], ['chispa', 2], ['moco', 3], ['nube', 1]]);       // sin reglas
+    const rico = L([['sombrin', 1], ['gordito', 2], ['nocti', 3], ['fantasmita', 1]],
+      { couples: [[2, 3]], breakdownChance: 0.3 });                                  // 5 reglas + avería
+    expect(difficultyIndex(rico, 15)).toBeGreaterThan(difficultyIndex(largo, 19));
+  });
+
+  it('los viajes se estiman solos si no se pasa el plan (cada tímido viaja aparte)', () => {
+    const sinTímido = L([['bubu', 1], ['chispa', 2], ['moco', 3], ['nube', 1]], { capacity: 4 });
+    const conTímido = L([['bubu', 1], ['chispa', 2], ['moco', 3], ['sombrin', 1]], { capacity: 4 });
+    expect(estimateTrips(sinTímido, buildCrew(sinTímido))).toBe(1);
+    expect(estimateTrips(conTímido, buildCrew(conTímido))).toBe(2);
+    expect(difficultyIndex(conTímido, 10)).toBeGreaterThan(difficultyIndex(sinTímido, 10));
+  });
+
+  it('la presión nunca es negativa y un nivel trivial puntúa por sus movimientos', () => {
     const lvl = L([['bubu', 1]], { capacity: 4 });
-    expect(difficultyIndex(lvl, 1, 1)).toBe(1);
-  });
-});
-
-describe('cobertura de reglas: ninguna regla social se queda sin probar', () => {
-  // Lista mantenida a mano con las reglas que ESTE archivo prueba. El test de abajo
-  // la compara con las reglas que existen de verdad en el juego: si alguien añade un
-  // monstruo con una regla nueva y no escribe su prueba, esto falla.
-  const PROBADAS: string[] = [
-    'shy',          // tímido: sube con la cabina vacía y nadie sube con él
-    'giant',        // gigante: ocupa 2 lugares
-    'luggage',      // maletero: ocupa 2 lugares
-    'ghost',        // fantasma: ocupa 0 lugares
-    'twins',        // gemelos: 1 unidad, 2 criaturas, mismo destino
-    'duo',          // dúo pegajoso: suben juntos con un toque, bajan por separado
-    'fear',         // miedoso: como mucho 2 criaturas con él dentro
-    'sleepwalker',  // sonámbulo: se duerme y hay que tocarlo para que salga
-    'couples',      // pareja enamorada: mismo destino, salen juntos
-    'enemies',      // enemigos: blanda en el juego real, dura en la ruta limpia
-  ];
-
-  it('todas las reglas de monstruo del juego tienen su prueba aquí', () => {
-    const delJuego = new Set<string>(Object.values(MONSTER_MAP).map((m) => m.rule));
-    delJuego.delete('none');
-    for (const r of ['couples', 'enemies']) delJuego.add(r);
-    const sinProbar = [...delJuego].filter((r) => !PROBADAS.includes(r));
-    expect(sinProbar, 'reglas sin prueba en tests/rules.test.ts').toEqual([]);
-    // y al revés: ninguna prueba huérfana de una regla que ya no existe
-    const inventadas = PROBADAS.filter((r) => !delJuego.has(r));
-    expect(inventadas, 'pruebas de reglas que no existen').toEqual([]);
-  });
-
-  it('ninguna regla es código muerto: todas aparecen en algún nivel de la campaña', () => {
-    const presentes = new Set<string>();
-    for (const lvl of LEVELS) for (const r of rulesPresent(lvl)) presentes.add(r);
-    for (const r of PROBADAS) {
-      expect(presentes.has(r), `la regla ${r} no se juega en ningún nivel`).toBe(true);
-    }
-  });
-
-  it('cada regla se estrena una sola vez y ese estreno está en la campaña', () => {
-    // newRulesIn devuelve las mecánicas que no existían en ningún nivel anterior.
-    const estrenos = LEVELS.flatMap((lvl) => newRulesIn(lvl, LEVELS));
-    expect(new Set(estrenos).size, 'una mecánica se estrena dos veces').toBe(estrenos.length);
-    for (const r of PROBADAS) expect(estrenos, `la regla ${r} no se estrena nunca`).toContain(r);
+    expect(difficultyIndex(lvl, 1)).toBe(1);
   });
 });

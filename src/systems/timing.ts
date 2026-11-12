@@ -147,7 +147,7 @@ export function levelTiming(level: LevelDef, solve?: SolveResult): LevelTiming {
     recommended,
     slack: round1(recommended - base),
     errorsTolerated: Math.floor((recommended - base) / mistakeCostSeconds()),
-    difficulty: difficultyIndex(level, optimal, crew.length),
+    difficulty: difficultyIndex(level, optimal, trips),
   };
   if (!solve) cache.set(level, t);
   return t;

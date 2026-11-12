@@ -2,9 +2,9 @@
 
 Fecha: 2026-11-10 · Versión del juego: 1.1.0 (renovación visual kawaii pastel + drama de piso equivocado)
 
-> **Recuento vigente: 186 pruebas en 8 archivos, todas en verde** (`npm test`).
+> **Recuento vigente: 203 pruebas en 8 archivos, todas en verde** (`npm test`).
 > Las secciones siguientes son históricas y se conservan tal cual; lo que está en
-> vigor es la última actualización, «Sprint 1: jugabilidad justa».
+> vigor es la última actualización, «Ajuste de diseño: variedad de destinos».
 
 ## Pruebas automatizadas (Vitest) — ✅ 31/31 superadas
 
@@ -286,10 +286,155 @@ pero sí el plan del nv 28 rediseñado.
   sin verificarse y corresponde al Sprint 5 con niños.
 - El presupuesto de avería cobra solo el reencuadre (3 s × probabilidad), porque la reparación
   pausa el reloj. Es una hipótesis razonable, no una medición con jugadores.
-- Para que el nv 17 llegue a 21 movimientos sus destinos se concentran en 3 pisos: con 4 pisos
-  distintos el máximo alcanzable es 19 (repartir huéspedes permite entregar más por viaje). Se
-  ha priorizado la curva sin escalones; la variedad de destinos queda pendiente.
+- ~~Para que el nv 17 llegue a 21 movimientos sus destinos se concentran en 3 pisos~~
+  **RESUELTO Y REVERTIDO** en la actualización siguiente: se ha sacrificado la monotonía de la
+  curva en favor de la variedad de destinos (nv 17 pasa de 21 a 17 movimientos y de 3 a 5 pisos).
 - `GameScene.ts` sigue teniendo ~2 240 líneas. Se ha migrado a las reglas compartidas sin
   partir el archivo, como se acordó: la división progresiva viene después de arreglar el juego.
 - Cobertura sigue siendo nula en las 8 escenas no-Game y en `cosmetics.ts`, `parental.ts`,
   `audio.ts`, `ui.ts` y `dialogues.ts` (necesitan navegador o un entorno DOM).
+
+---
+
+## Actualización: ajuste de diseño — variedad de destinos (post Sprint 1)
+
+**Recuento vigente: 203 pruebas en 8 archivos, todas en verde.** Compilación limpia
+(`npx tsc --noEmit`) y `npm run build` correcto.
+
+### La decisión que se revierte
+
+El Sprint 1 protegió la curva monótona de movimientos concentrando huéspedes en el último
+piso: el nv 17 tenía 6 de 8 en el piso 5 y el nv 28, 8 de 10. Eso alargaba la ruta pero hacía
+los niveles parecidos entre sí y los edificios artificiales. **Ahora manda la variedad**: se
+acepta que un nivel baje en movimientos si su edificio es natural.
+
+### Datos que cambian (8 niveles rediseñados de 30)
+
+| Nivel | Antes (pisos usados · máx. en un piso · óptimo) | Después | Límite |
+|---|---|---|---|
+| 15 | 3 · 6/9 · 21 | 4 · 5/9 · **19** | 110 → **115** |
+| 16 | 3 · 5/8 · 21 | 4 · 4/8 · **19** | 105 → **115** |
+| 17 | 3 · **6/8** · 21 | **5** · 2/8 · **17** | 105 → **115** |
+| 19 | 3 · **5/7** · 21 | **5** · 3/7 · 21 | 105 → **110** |
+| 20 | 4 · 4/8 · 21 | 4 · 4/8 · 21 (reparto distinto) | 110 |
+| 21 | 3 · 5/8 · 21 | 4 · 4/8 · **19** | 105 → **110** |
+| 24 | 4 · 3/8 · 25 (atajo −8) | 4 · 3/8 · 25 (**atajo −4**) | 115 |
+| 28 | 3 · **8/10** · 25 | 4 · 4/10 · **23** | 120 |
+
+El nv 25 sube su límite de 120 a 125 porque su reparto nuevo alarga los viajes reales.
+Σ de límites: 3265 s → **3305 s** (+40 s, +1,2 %); la media por nivel pasa de 108,8 a 110,2 s.
+Los 22 niveles restantes no se tocan: ninguno incumple los criterios de variedad.
+
+**Criterio aplicado a los 30**: al menos 4 pisos distintos en uso (o todos los del edificio si
+tiene menos, que son los niveles 1–3 de 2 y 3 pisos) y ningún piso con más de la mitad de la
+tripulación. Verificado por `tests/progression.test.ts`.
+
+### El nv 24: atajo de 8 → 4
+
+Antes, juntar a los dos enemigos del nv 24 ahorraba 8 movimientos de 25: respetar la enemistad
+parecía un castigo. La causa era estructural — los dos enemigos estaban en pisos que obligaban
+a un viaje extra si no se juntaban. Se ha rehecho el reparto de destinos **y** se ha movido la
+enemistad a la pareja gruñón ↔ nube (índices 1 y 5), que compiten por la misma franja del
+recorrido: ahora la ruta limpia sigue costando **25** pasos y juntarlos ahorra **4**
+(21). La penalización de estrella se mantiene intacta y la solución limpia sigue siendo válida
+y demostrada por el solver. Prueba fija: `tests/levels.test.ts` «nivel 24: los enemigos son
+gruñón y nube y juntarlos ahorra poco».
+
+### Índice de dificultad compuesto (nuevo)
+
+`difficultyIndex()` ya no era suficiente: pesaba movimientos, reglas, presión de cabina y
+averías, pero **no los viajes ni la complejidad de las decisiones**. Ahora suma también:
+
+- `+2 × (viajes − 1)`: cada viaje extra obliga a rehacer el plan desde cero. Recibe los viajes
+  REALES del plan óptimo (`timing.ts` se los pasa); si no se conocen, `estimateTrips()` los
+  aproxima contando que cada tímido necesita un ascensor para él solo.
+- `+2 × (destinos distintos − 1)`: **la variedad puntúa**. Es el término que impide volver a
+  amontonar huéspedes en el ático para inflar la ruta.
+- `+2 × (reglas − 2)`: combinar tres o más reglas cuesta más que sumarlas.
+- `+3 × sonámbulos`: evento especial dentro de la cabina.
+- La presión de cabina ahora cuenta **lugares** (`slotsOf`), no bultos: el gigante y el
+  maletero valen 2 y el fantasma 0.
+
+Curva resultante del índice (nv 1 → 30):
+`4 14 17 22 25 25 30 37 43 47 44 56 50 48 48 48 52 61 59 58 55 69 64 60 77 78 86 77 94 97`
+
+Los movimientos óptimos:
+`2 5 5 8 8 8 11 13 15 17 19 19 19 19 19 19 17 21 21 21 19 21 23 25 25 25 25 23 27 27`
+
+Hay tres niveles de consolidación (17, 21 y 28 bajan en pasos) pero el índice nunca cae más de
+10 puntos, toda caída se recupera en menos de 5 niveles, la tendencia a 8 niveles siempre sube
+y el nv 30 sigue siendo la cima (97). La dificultad se sostiene con reglas, viajes y variedad,
+no con la cuenta de movimientos.
+
+### Pruebas nuevas (186 → 203)
+
+- `tests/progression.test.ts` **reescrito** (18 → **28**): el bloque nuevo «variedad de
+  destinos: edificios naturales, no embudos al ático» exige ≥4 pisos distintos y ningún piso
+  por encima de la mitad de la tripulación; la monotonía de movimientos se sustituye por
+  «caídas ≤2 pasos, nunca dos seguidas»; el índice compuesto se vigila con caída máxima de 10
+  puntos, recuperación en 5 niveles y tendencia a 8; y un bloque nuevo limita los atajos por
+  romper relaciones a 4 pasos y comprueba que el atajo exista de verdad (que la regla no sea
+  decorativa).
+- `tests/rules.test.ts` (40 → **44**): el bloque del índice pasa de 2 pruebas genéricas a 9
+  que fijan CADA término por separado (movimientos, reglas y su combinación creciente, presión
+  en lugares con gigante/maletero/fantasma/tímido, viajes, variedad de destinos, sonámbulos,
+  averías, y el caso «menos pasos pero más reglas = más difícil»).
+- `tests/levels.test.ts` (20 → **23**): distribución concreta de los niveles 17, 24 y 28.
+
+### Estudio del error grave (PRESENTADO, NO APLICADO)
+
+Pregunta: ¿aguantan los cronómetros 1 error grave + 1 normal sin perder por tiempo?
+
+Un **error grave** es lo que provoca `GameScene.wrongFloor()` al llegar a `MAX_MISTAKES = 3`
+pisos equivocados SEGUIDOS (el contador se reinicia con cada entrega correcta): el globo avisa,
+el ascensor espera 1,4 s, baja a recepción y allí `grumpyExit()` devuelve a TODOS a la cola
+(salida escalonada cada 260 ms). El jugador tiene que volver a tocarlos a todos y rehacer el
+viaje. Medido con el modelo de `timing.ts` sobre el reparto real de cada nivel:
+
+| Concepto | Coste |
+|---|---|
+| error normal (piso equivocado) | **7,76 s** |
+| margen que da el reloj hoy | 2 × 7,76 = **15,5 s** |
+| error grave completo (3 errores + evacuación + recolocación) | **43,1 s de media** (39,6–45,4) |
+| 1 normal + 1 grave | 50,9 s de media |
+
+**Respuesta: no.** Con los límites actuales, 1 normal + 1 grave caben en **0 de 30** niveles
+(faltan entre 28 y 35 s). Mi cálculo anterior de ~15,8 s estaba mal: no contabilizaba volver a
+tocar a todos los pasajeros ni el viaje de vuelta.
+
+Opciones medidas (ninguna aplicada):
+
+| Opción | Σ límites | Campaña | Media/nivel | Nivel máx. |
+|---|---|---|---|---|
+| A. Dejarlo como está | 3305 s | 55,1 min | 110,2 s | 145 s |
+| B. Presupuestar 1 error grave | 4135 s | 68,9 min (**+25 %**) | 137,8 s | 175 s |
+| C. 1 grave + 1 normal | 4365 s | 72,8 min (**+32 %**) | 145,5 s | 185 s |
+
+Notas para decidir:
+
+- El límite es un **techo**, no una duración: quien juega bien termina igual de rápido. Subirlo
+  solo alarga la partida de quien se equivoca, que es justo quien hoy pierde.
+- No toca economía ni estrellas: las estrellas dependen de los movimientos, no del reloj, y no
+  hay ninguna recompensa por tiempo (`economy.ts`).
+- La opción C choca con la cota de `tests/timing.test.ts` (límite < 2,2 × tiempo esperado:
+  llegaría exactamente a 2,20), así que exigiría relajar ese test. La B se queda en 2,07.
+- Alternativas que no alargan la campaña: pausar el reloj durante el drama de la evacuación
+  (como ya se hace con averías y diálogos) ahorra solo ~2 s; reducir `MAX_MISTAKES` a 2
+  hace el castigo más frecuente; dar tiempo extra al producirse la salida gruñona sería una
+  mecánica nueva.
+- Recomendación: **B** si se quiere que un niño de 6 años pueda recuperarse de un desastre sin
+  perder el nivel; **A** si se prefiere la campaña corta contando con que los reintentos son
+  ilimitados y gratis. Se aplicará en cuanto se decida.
+
+### Honestidad
+
+- **No se ha abierto el juego en un navegador**: sigue sin haber navegador en este entorno.
+  Los 203 tests, la compilación y la simulación numérica de los 30 planes óptimos no
+  sustituyen la sensación de jugar; los edificios «naturales» se han verificado con números
+  (pisos usados, ocupación máxima, viajes), no con la vista.
+- Los costes del error grave se han leído del código de `GameScene.ts` (1400 ms de espera,
+  260 ms de escalonado, `travelTo(0)`) y valorado con `PACING`; no se han medido con jugadores.
+- La variedad se ha buscado maximizando el índice compuesto entre los repartos que cumplen los
+  criterios, no eligiendo a mano: hay cientos de repartos válidos por nivel y se han tomado los
+  mejores. Si el juego se siente raro en algún piso, el reparto es ajustable sin romper nada
+  (el `timeLimit` se recalcula solo).

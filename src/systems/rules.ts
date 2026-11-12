@@ -282,22 +282,59 @@ export function newRulesIn(level: LevelDef, all: LevelDef[]): LevelRule[] {
 }
 
 /**
- * ÍNDICE DE DIFICULTAD (adimensional: solo sirve para comparar niveles entre sí).
- *
- * No usa solo los movimientos: un nivel de 12 pasos con tres reglas sociales es
- * más difícil que uno de 16 pasos sin ninguna. Pesa lo que el jugador tiene que
- * PENSAR, no lo que tiene que pulsar:
- *
- *   optimal               tamaño real del problema (movimientos mínimos demostrados)
- * + 4 × reglas sociales    cada regla activa obliga a interpretar una restricción
- * + 3 × presión de cabina  criaturas que no caben a la vez → más viajes que planificar
- * + 8 × prob. de avería    la interrupción rompe el plan a mitad de partida
- *
- * Lo consume tests/progression.test.ts para exigir que la campaña no tenga caídas
- * bruscas: la dificultad puede amesetarse, pero no desplomarse sin motivo.
+ * Viajes mínimos que exige la ESTRUCTURA del nivel (sin resolverlo): cada tímido
+ * necesita un ascensor para él solo y el resto se reparte por lugares disponibles.
+ * Es una cota inferior; si se conoce el plan real, mejor pasárselo a difficultyIndex.
  */
-export function difficultyIndex(level: LevelDef, optimal: number, crewSize: number): number {
+export function estimateTrips(level: LevelDef, crew: CrewMember[]): number {
+  const solos = crew.filter((m) => m.rule === 'shy').length;
+  const resto = crew.filter((m) => m.rule !== 'shy');
+  const sitios = slotsOf(crew, resto.map((m) => m.id));
+  return Math.max(1, solos + Math.ceil(sitios / Math.max(1, level.capacity)));
+}
+
+/**
+ * ÍNDICE DE DIFICULTAD COMPUESTO (adimensional: solo sirve para comparar niveles).
+ *
+ * La dificultad NO es la cuenta de movimientos. Dos niveles con los mismos pasos
+ * pueden ser muy distintos: uno con cuatro reglas sociales, tres viajes y huéspedes
+ * repartidos por cinco pisos obliga a pensar mucho más que uno con todos los
+ * pasajeros yendo al ático. Por eso el índice suma lo que el jugador tiene que
+ * PENSAR y lo que le interrumpe:
+ *
+ *   optimal                       tamaño real del problema (pasos mínimos demostrados)
+ * + 4 × reglas sociales            cada regla activa obliga a interpretar una restricción
+ * + 2 × reglas a partir de la 3.ª  combinarlas no suma, multiplica (fantasma + gigante
+ *                                  + miedoso a la vez es otro juego, no tres juegos)
+ * + 3 × presión de cabina          lugares ocupados que no caben a la vez: el gigante y
+ *                                  el maletero cuentan 2, el fantasma 0
+ * + 2 × (viajes − 1)               cada viaje extra obliga a rehacer el plan desde cero
+ * + 2 × (destinos distintos − 1)   variedad real: más pisos implicados = más decisiones
+ *                                  de ruta (a quién dejo primero, por dónde subo)
+ * + 3 × sonámbulos                 eventos especiales dentro de la cabina (hay que
+ *                                  estar pendiente de despertarlos)
+ * + 8 × probabilidad de avería     eventos especiales que parten la partida por la mitad
+ *
+ * Lo consume tests/progression.test.ts. Como la variedad de destinos PUNTÚA, un nivel
+ * puede bajar en movimientos y seguir siendo igual de difícil: es justo lo que se busca
+ * (niveles naturales en vez de concentraciones artificiales en el último piso).
+ */
+export function difficultyIndex(level: LevelDef, optimal: number, trips?: number): number {
+  const crew = buildCrew(level);
+  const todos = crew.map((m) => m.id);
   const rules = rulesPresent(level).length;
-  const pressure = Math.max(0, crewSize - level.capacity);
-  return Math.round(optimal + 4 * rules + 3 * pressure + 8 * level.breakdownChance);
+  const pressure = Math.max(0, slotsOf(crew, todos) - level.capacity);
+  const viajes = trips ?? estimateTrips(level, crew);
+  const destinos = new Set(level.passengers.map((p) => p.d)).size;
+  const sleepers = crew.filter((m) => m.needsWake).length;
+  return Math.round(
+    optimal
+    + 4 * rules
+    + 2 * Math.max(0, rules - 2)
+    + 3 * pressure
+    + 2 * Math.max(0, viajes - 1)
+    + 2 * Math.max(0, destinos - 1)
+    + 3 * sleepers
+    + 8 * level.breakdownChance,
+  );
 }

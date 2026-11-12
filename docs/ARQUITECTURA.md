@@ -26,7 +26,9 @@ src/
   systems/
     rules.ts               ★ Única fuente de verdad de las reglas sociales y de
                              cabina: buildCrew, canBoard, canExit, rulesPresent,
-                             difficultyIndex. La usan EL MOTOR y EL SOLVER.
+                             estimateTrips, difficultyIndex (índice compuesto:
+                             movimientos + reglas + cabina + viajes + variedad de
+                             destinos + eventos). La usan EL MOTOR y EL SOLVER.
     timing.ts              ★ Presupuesto de tiempo por nivel (PACING): cuántos
                              segundos cuesta jugar un nivel y cuántos se dan de
                              margen para equivocarse dos veces.
@@ -51,7 +53,7 @@ src/
 tests/
   rules.test.ts            ★ Reglas sociales y de cabina, una por una
   timing.test.ts           ★ Presupuesto de los 30 cronómetros
-  progression.test.ts      ★ Forma de la curva de dificultad
+  progression.test.ts      ★ Variedad de destinos y curva del índice compuesto
   scoring.test.ts          Óptimo, estrellas y monedas (+ fuerza bruta)
   levels.test.ts           Integridad de niveles y reproducibilidad del plan
   balance.test.ts          Simulación de perfiles de jugador

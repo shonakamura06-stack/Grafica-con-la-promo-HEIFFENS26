@@ -75,6 +75,34 @@ una tarjeta visual. Después queda registrada en el álbum.
 | Especiales II | 21–25 | Nocti, Fantasmita, combinaciones |
 | Desafío final | 26–30 | 5 pisos, hasta 10 pasajeros con varias reglas |
 
+### La variedad manda sobre la curva monótona
+
+Ningún nivel amontona a sus huéspedes en un piso para alargar la ruta: **todos usan al menos
+4 pisos distintos** (o todos los de su edificio si tiene menos) y **ningún piso concentra más
+de la mitad de la tripulación**. Un edificio natural es mejor puzle que un embudo al ático,
+aunque eso baje la cuenta de movimientos: los niveles 17, 21 y 28 son de consolidación (19,
+19 y 23 pasos) y la campaña sigue subiendo después.
+
+### Índice de dificultad compuesto
+
+La dificultad NO es la cuenta de pasos. `difficultyIndex()` (`src/systems/rules.ts`) suma lo
+que el jugador tiene que pensar y lo que le interrumpe:
+
+| Término | Peso | Por qué |
+|---|---|---|
+| movimientos óptimos | 1× | tamaño real del problema |
+| reglas sociales activas | 4× cada una | cada regla obliga a interpretar una restricción |
+| combinación de reglas | +2× a partir de la 3.ª | combinarlas no suma, multiplica |
+| presión de cabina | 3× por lugar que sobra | lugares, no bultos: el gigante y el maletero valen 2, el fantasma 0 |
+| viajes | 2× por viaje extra | cada viaje obliga a rehacer el plan desde cero |
+| **variedad de destinos** | 2× por piso distinto extra | repartir pisos es más difícil que amontonarlos |
+| sonámbulos en cabina | 3× cada uno | evento especial dentro del ascensor |
+| probabilidad de avería | 8× | evento especial que parte la partida |
+
+Como la variedad PUNTÚA, un nivel puede bajar en movimientos y seguir siendo igual de difícil.
+`tests/progression.test.ts` vigila que el índice no caiga más de 10 puntos entre niveles
+seguidos, que toda caída se recupere en 5 niveles y que la tendencia a 8 niveles siempre suba.
+
 ## Controles
 
 - Todo se juega con toques (o clic). Sin gestos complicados.
@@ -143,8 +171,17 @@ una tarjeta visual. Después queda registrada en el álbum.
   viajes (0,42 s por piso), salidas, despertar a Nocti (3 s de duda + 3 s de toque) y el
   tiempo de pensar (2,5 s por viaje) — más el aprendizaje de la primera vez que aparece una
   regla (8 s al principio, 4 s a partir del nivel 15), el reencuadre tras una avería (3 s) y
-  **el margen para equivocarse dos veces** (2 errores normales o 1 error grave + 1 normal).
-  Nada de multiplicadores genéricos. Se redondea a múltiplos de 5 y se guarda en el campo
+  **el margen para equivocarse dos veces** (2 errores normales de 7,76 s = 15,5 s).
+  Nada de multiplicadores genéricos.
+- **Estudio pendiente de decisión (no aplicado)**: un *error grave* — tres pisos equivocados
+  seguidos, que devuelven a TODOS a recepción — cuesta de media **43 s** (los 3 errores, la
+  espera del globo, bajar, la salida escalonada, volver a tocarlos a todos y volver a subir),
+  mucho más de lo que cubre el margen actual. Presupuestar 1 error grave subiría los límites
+  de 3305 s a 4135 s (55 → 69 min de campaña, +25 %, media por nivel 110 → 138 s); añadir
+  además 1 error normal lo llevaría a 4365 s (+32 %). Cifra por cifra en
+  `docs/INFORME-PRUEBAS.md`. El límite es un techo: un jugador que no se equivoca termina en
+  el mismo tiempo, así que la decisión solo afecta a quien falla, y no toca estrellas ni
+  monedas. **No se ha cambiado nada sin presentarlo antes.** Se redondea a múltiplos de 5 y se guarda en el campo
   `timeLimit`, que `tests/timing.test.ts` obliga a mantener igual que el modelo.
 - **El cronómetro NO corre mientras se repara ni mientras se lee**: `startTimer()` ya se
   detenía durante averías, diálogos de Rese y tutoriales. Con el Sprint 1 también se congela

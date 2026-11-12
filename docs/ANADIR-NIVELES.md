@@ -61,19 +61,27 @@ npx vitest run tests/timing.test.ts   # falla y dice qué valor toca poner
 que ningún nivel baje de 2 errores tolerables. Si cambias el roster o los
 destinos de un nivel, su `timeLimit` cambia solo: no lo "redondees a ojo".
 
-## La curva no puede romperse
+## La variedad manda sobre la curva monótona
 
-`tests/progression.test.ts` fija la forma de la campaña:
+`tests/progression.test.ts` fija la forma de la campaña. **No se exige que cada nivel tenga
+más movimientos que el anterior**: se exige que el edificio sea natural y que la dificultad
+compuesta no se desplome.
 
-1. Los movimientos óptimos **nunca bajan** de un nivel al siguiente.
-2. Las mesetas del óptimo duran como mucho 8 niveles y el índice de dificultad
-   (`difficultyIndex` de `systems/rules.ts`) del último supera al del primero:
-   la complejidad se añade combinando reglas, no apilando pasajeros.
-3. El índice de dificultad no cae más de 6 puntos entre niveles seguidos y la
-   tendencia a 6 niveles siempre sube. El nivel 30 es el más difícil.
-4. Cada mecánica se estrena una sola vez y en el nivel que dice su ficha.
+1. **Variedad de destinos**: al menos 4 pisos distintos en uso (o todos los del edificio si
+   tiene menos) y ningún piso con más de la mitad de la tripulación. Amontonar huéspedes en
+   el ático para alargar la ruta es un atajo artificioso y el test lo rechaza.
+2. **Movimientos**: pueden bajar hasta 2 pasos en un nivel de consolidación, pero nunca dos
+   niveles seguidos a la baja. El nivel 1 es trivial (≤3) y el 30 es el más largo (≥24).
+3. **Índice de dificultad compuesto** (`difficultyIndex` de `systems/rules.ts`): movimientos
+   + reglas y su combinación + presión de cabina (en lugares, no en bultos) + viajes +
+   variedad de destinos + sonámbulos + averías. No puede caer más de 10 puntos entre niveles
+   seguidos, toda caída debe recuperarse en 5 niveles, la tendencia a 8 niveles siempre sube
+   y el nivel 30 es la cima.
+4. **Atajos moderados**: romper una relación (juntar enemigos, separar parejas) puede ahorrar
+   pasos, pero como máximo 4; si fuera mucho más, respetar las reglas parecería un castigo.
+5. Cada mecánica se estrena una sola vez y en el nivel que dice su ficha.
 
-Si un nivel nuevo rompe alguna de estas reglas, el test falla diciendo cuál.
+Si un nivel nuevo rompe alguna de estas reglas, el test falla diciendo cuál y con qué número.
 
 ## Verificación automática
 

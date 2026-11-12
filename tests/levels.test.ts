@@ -242,6 +242,37 @@ describe('el plan óptimo se puede jugar de verdad (solver ↔ motor)', () => {
     }
   }, 60000);
 
+  it('nivel 24: los enemigos son gruñón y nube y juntarlos ahorra poco', () => {
+    // En el primer rediseño el atajo valía 8 movimientos: respetar la enemistad
+    // parecía un castigo. Ahora vale 4 y el óptimo limpio se mantiene en 25.
+    const lvl = LEVELS[23];
+    expect(lvl.enemies).toEqual([[1, 5]]);
+    expect(lvl.passengers[1].m).toBe('grunon');
+    expect(lvl.passengers[5].m).toBe('nube');
+    const limpio = computeOptimal(lvl).optimal;
+    const atajo = computeOptimal(lvl, 'real').optimal;
+    expect(limpio).toBe(25);
+    expect(limpio - atajo).toBe(4);
+  }, 60000);
+
+  it('nivel 28: diez huéspedes repartidos por cuatro pisos, sin embudo al ático', () => {
+    const lvl = LEVELS[27];
+    const recuento = new Map<number, number>();
+    for (const p of lvl.passengers) recuento.set(p.d, (recuento.get(p.d) ?? 0) + 1);
+    expect(recuento.size).toBeGreaterThanOrEqual(4);
+    expect(Math.max(...recuento.values())).toBeLessThanOrEqual(4);  // antes: 8 en el piso 5
+    expect(computeOptimal(lvl).optimal).toBe(23);
+  }, 60000);
+
+  it('nivel 17: ocho huéspedes repartidos por los cinco pisos', () => {
+    const lvl = LEVELS[16];
+    const recuento = new Map<number, number>();
+    for (const p of lvl.passengers) recuento.set(p.d, (recuento.get(p.d) ?? 0) + 1);
+    expect(recuento.size).toBe(5);                                  // antes: 3 pisos
+    expect(Math.max(...recuento.values())).toBeLessThanOrEqual(2);  // antes: 6 en el piso 5
+    expect(lvl.passengers[7].m).toBe('gordito');                    // gigante en el cierre del cap. 4
+  }, 60000);
+
   it('la ruta limpia nunca es más corta que la ruta que sí rompe relaciones', () => {
     for (const lvl of LEVELS) {
       const clean = computeOptimal(lvl, 'clean').optimal;

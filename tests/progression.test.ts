@@ -1,68 +1,97 @@
 /**
- * Pruebas de PROGRESIÓN de la campaña (data/levels.ts + systems/rules.ts).
+ * Pruebas de PROGRESIÓN y DISEÑO de la campaña (data/levels.ts + systems/rules.ts).
  *
- * La auditoría encontró una curva en sierra: nivel 12 = 25 movimientos, 13 = 17,
- * 14 = 11; nivel 23 = 19 y 24 = 11. El jugador pasaba de un pico a un respiro sin
- * motivo. Estas pruebas fijan la forma de la curva para que no vuelva a romperse:
+ * Criterio del Sprint 1 (revisado): **la variedad manda sobre la monotonía**.
+ * Un nivel no puede amontonar a todos sus huéspedes en el último piso solo para
+ * alargar la ruta; la dificultad se mide con el índice compuesto de
+ * `difficultyIndex` (movimientos + reglas y su combinación + presión de cabina +
+ * viajes + variedad de destinos + eventos especiales), no contando pasos.
  *
- *   - los movimientos óptimos NUNCA bajan de un nivel al siguiente,
- *   - el índice de dificultad puede amesetarse o dipar un poco (las reglas rotan),
- *     pero nunca desplomarse, y la tendencia a 4 niveles siempre sube,
- *   - el nivel 30 es el más difícil de la campaña,
- *   - cada mecánica se estrena una vez, en orden, y el monstruo aparece en el
- *     nivel que dice su ficha del álbum,
- *   - el título de un nivel no promete un monstruo que no está.
+ * Por eso estos tests exigen:
+ *   - edificios variados: al menos 4 pisos distintos en uso (o todos los del
+ *     edificio si tiene menos) y nadie amontonado en un solo piso,
+ *   - movimientos que pueden bajar un poco en niveles de consolidación, pero
+ *     nunca desplomarse,
+ *   - un índice de dificultad que no caiga en picado y cuya tendencia a 8 niveles
+ *     siempre suba, con el nivel 30 como cima,
+ *   - atajos moderados: romper una relación puede ahorrar pasos, pero pocos,
+ *   - estrenos de mecánica una sola vez y en el nivel que dice la ficha,
+ *   - títulos que no prometan un monstruo que no está.
  */
 import { describe, it, expect } from 'vitest';
 import { LEVELS, TOTAL_LEVELS } from '../src/data/levels';
 import { MONSTERS, MONSTER_MAP, TWIN_GROUP } from '../src/data/monsters';
-import { computeOptimal } from '../src/systems/scoring';
-import { buildCrew, difficultyIndex } from '../src/systems/rules';
+import { computeOptimal, PlanStep } from '../src/systems/scoring';
+import { buildCrew, difficultyIndex, rulesPresent } from '../src/systems/rules';
+
+/** Viajes de carga del plan óptimo (subidas separadas por un desplazamiento). */
+function tripsOf(plan: PlanStep[]): number {
+  let trips = 0;
+  let prev: string | null = null;
+  for (const s of plan) {
+    if (s.kind === 'board' && prev !== 'board') trips += 1;
+    prev = s.kind;
+  }
+  return trips;
+}
 
 interface Row {
-  id: number; optimal: number; difficulty: number; crew: number; pax: number;
-  capacity: number; floors: number; breakdown: number; rules: string[];
+  id: number; title: string; optimal: number; real: number; difficulty: number;
+  crew: number; pax: number; capacity: number; floors: number; breakdown: number;
+  rules: string[]; trips: number; floorsUsed: number; maxPiso: number;
 }
 
 const rows: Row[] = LEVELS.map((lvl) => {
-  const { optimal } = computeOptimal(lvl);
+  const limpio = computeOptimal(lvl);
+  const sucio = computeOptimal(lvl, 'real');
   const crew = buildCrew(lvl);
-  const rules = new Set<string>(crew.filter((m) => m.rule !== 'none').map((m) => m.rule));
-  if (lvl.couples.length) rules.add('couples');
-  if (lvl.enemies.length) rules.add('enemies');
+  const trips = tripsOf(limpio.plan);
+  const cuenta = new Map<number, number>();
+  for (const p of lvl.passengers) cuenta.set(p.d, (cuenta.get(p.d) ?? 0) + 1);
   return {
-    id: lvl.id, optimal, difficulty: difficultyIndex(lvl, optimal, crew.length),
+    id: lvl.id, title: lvl.title, optimal: limpio.optimal, real: sucio.optimal,
+    difficulty: difficultyIndex(lvl, limpio.optimal, trips), trips,
+    floorsUsed: cuenta.size, maxPiso: Math.max(...cuenta.values()),
     crew: crew.length, pax: lvl.passengers.length, capacity: lvl.capacity,
-    floors: lvl.floors, breakdown: lvl.breakdownChance, rules: [...rules],
+    floors: lvl.floors, breakdown: lvl.breakdownChance, rules: rulesPresent(lvl),
   };
 });
 
-describe('curva de movimientos óptimos', () => {
-  it('NUNCA baja de un nivel al siguiente (antes caía de 25 a 17 y de 19 a 11)', () => {
-    for (let i = 1; i < rows.length; i++) {
-      expect(rows[i].optimal, `nv${rows[i].id} baja respecto a nv${rows[i - 1].id}`)
-        .toBeGreaterThanOrEqual(rows[i - 1].optimal);
+describe('variedad de destinos: edificios naturales, no embudos al ático', () => {
+  it('todo nivel con edificio de 4+ pisos usa al menos 4 pisos distintos', () => {
+    for (const r of rows) {
+      expect(r.floorsUsed, `nv${r.id} "${r.title}"`).toBeGreaterThanOrEqual(Math.min(r.floors, 4));
     }
   }, 60000);
 
-  it('las mesetas del óptimo están acotadas y compensadas con reglas nuevas', () => {
-    // El óptimo PUEDE amesetarse: la complejidad de la segunda mitad viene de
-    // combinar reglas (sonámbulo + dúo + maletas + averías), no de meter más
-    // pasajeros. Lo que no se admite es una meseta eterna y plana: como mucho 8
-    // niveles seguidos con el mismo número de movimientos, y el índice de
-    // dificultad del último tiene que superar al del primero.
-    let inicio = 0;
-    for (let i = 1; i <= rows.length; i++) {
-      if (i === rows.length || rows[i].optimal !== rows[inicio].optimal) {
-        const largo = i - inicio;
-        expect(largo, `meseta de ${rows[inicio].optimal} pasos desde nv${rows[inicio].id}`)
-          .toBeLessThanOrEqual(8);
-        if (largo > 1) {
-          expect(rows[i - 1].difficulty, `meseta nv${rows[inicio].id}-nv${rows[i - 1].id} sin avanzar`)
-            .toBeGreaterThanOrEqual(rows[inicio].difficulty);
-        }
-        inicio = i;
-      }
+  it('ningún piso acumula más de la mitad de los huéspedes (antes: 8 de 10 en el piso 5)', () => {
+    for (const r of rows) {
+      const tope = Math.max(2, Math.ceil(r.crew / 2));
+      expect(r.maxPiso, `nv${r.id} "${r.title}" amontona`).toBeLessThanOrEqual(tope);
+    }
+  }, 60000);
+
+  it('los destinos están repartidos: ningún nivel usa un solo piso para todos', () => {
+    for (const r of rows) {
+      expect(r.floorsUsed, `nv${r.id}`).toBeGreaterThan(1);
+    }
+  }, 60000);
+});
+
+describe('curva de movimientos óptimos', () => {
+  it('puede bajar en niveles de consolidación, pero como mucho 2 pasos', () => {
+    for (let i = 1; i < rows.length; i++) {
+      const caida = rows[i - 1].optimal - rows[i].optimal;
+      expect(caida, `nv${rows[i].id} cae ${caida} pasos respecto a nv${rows[i - 1].id}`)
+        .toBeLessThanOrEqual(2);
+    }
+  }, 60000);
+
+  it('no hay dos caídas de movimientos seguidas', () => {
+    for (let i = 2; i < rows.length; i++) {
+      const c1 = rows[i - 2].optimal > rows[i - 1].optimal;
+      const c2 = rows[i - 1].optimal > rows[i].optimal;
+      expect(c1 && c2, `nv${rows[i - 1].id} y nv${rows[i].id} bajan a la vez`).toBe(false);
     }
   }, 60000);
 
@@ -77,32 +106,73 @@ describe('curva de movimientos óptimos', () => {
       expect(r.optimal, `nv${r.id}`).toBeLessThanOrEqual(17);
     }
   }, 60000);
+
+  it('la segunda mitad nunca es más corta que la primera', () => {
+    const mediaPrimera = rows.slice(0, 15).reduce((a, r) => a + r.optimal, 0) / 15;
+    const mediaSegunda = rows.slice(15).reduce((a, r) => a + r.optimal, 0) / 15;
+    expect(mediaSegunda).toBeGreaterThan(mediaPrimera);
+  }, 60000);
 });
 
-describe('curva del índice de dificultad', () => {
-  it('no se desploma: como mucho 6 puntos de caída entre niveles seguidos', () => {
+describe('curva del índice de dificultad compuesto', () => {
+  it('no se desploma: como mucho 10 puntos de caída entre niveles seguidos', () => {
     for (let i = 1; i < rows.length; i++) {
-      expect(rows[i].difficulty, `nv${rows[i].id} cae desde ${rows[i - 1].difficulty}`)
-        .toBeGreaterThanOrEqual(rows[i - 1].difficulty - 6);
+      const caida = rows[i - 1].difficulty - rows[i].difficulty;
+      expect(caida, `nv${rows[i].id} cae ${caida} puntos desde nv${rows[i - 1].id}`)
+        .toBeLessThanOrEqual(10);
     }
   }, 60000);
 
-  it('la tendencia a 6 niveles siempre sube', () => {
-    // Ventana de 6: permite que un nivel baje un poco respecto al anterior porque
-    // ese día rotan las reglas (menos mecánicas activas = índice menor), pero la
-    // campaña no puede estar 6 niveles seguidos sin endurecerse.
-    for (let i = 6; i < rows.length; i++) {
-      expect(rows[i].difficulty, `nv${rows[i].id} no supera a nv${rows[i - 6].id}`)
-        .toBeGreaterThanOrEqual(rows[i - 6].difficulty);
+  it('toda caída se recupera en 5 niveles como mucho', () => {
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i].difficulty >= rows[i - 1].difficulty) continue;
+      const despues = rows.slice(i + 1, i + 6).map((r) => r.difficulty);
+      expect(Math.max(...despues, rows[i].difficulty),
+        `la caída de nv${rows[i].id} no se recupera`)
+        .toBeGreaterThanOrEqual(rows[i - 1].difficulty);
     }
   }, 60000);
 
-  it('el nivel 30 es el más difícil de la campaña', () => {
+  it('la tendencia a 8 niveles siempre sube', () => {
+    for (let i = 8; i < rows.length; i++) {
+      expect(rows[i].difficulty, `nv${rows[i].id} no supera a nv${rows[i - 8].id}`)
+        .toBeGreaterThanOrEqual(rows[i - 8].difficulty);
+    }
+  }, 60000);
+
+  it('el nivel 30 es la cima de la campaña', () => {
     expect(rows[29].difficulty).toBe(Math.max(...rows.map((r) => r.difficulty)));
   }, 60000);
 
   it('la dificultad del nivel 1 es mínima (apenas hay que pensar)', () => {
     expect(rows[0].difficulty).toBeLessThanOrEqual(6);
+  }, 60000);
+
+  it('los niveles de consolidación son pocos: la campaña no cuesta abajo', () => {
+    const caidas = rows.filter((r, i) => i > 0 && r.difficulty < rows[i - 1].difficulty).length;
+    expect(caidas).toBeLessThanOrEqual(10);
+    // y la media de la última decena es claramente mayor que la de la primera
+    const media = (xs: Row[]) => xs.reduce((a, r) => a + r.difficulty, 0) / xs.length;
+    expect(media(rows.slice(20))).toBeGreaterThan(media(rows.slice(0, 10)) * 1.5);
+  }, 60000);
+});
+
+describe('atajos por romper las reglas: moderados', () => {
+  it('juntar enemigos o separar parejas ahorra como mucho 4 movimientos', () => {
+    // Si el atajo fuera enorme, respetar las relaciones parecería un castigo.
+    for (const r of rows) {
+      expect(r.optimal - r.real, `nv${r.id} "${r.title}" regala ${r.optimal - r.real} pasos`)
+        .toBeLessThanOrEqual(4);
+      expect(r.real, `nv${r.id}`).toBeLessThanOrEqual(r.optimal);
+    }
+  }, 60000);
+
+  it('los niveles con relaciones sí ofrecen el atajo (no es una regla muerta)', () => {
+    const conRelaciones = rows.filter((r) => r.rules.includes('enemies') || r.rules.includes('couples'));
+    expect(conRelaciones.length).toBeGreaterThan(5);
+    const atajos = conRelaciones.filter((r) => r.optimal - r.real > 0);
+    expect(atajos.length, 'ningún nivel permite ganar pasos rompiendo una relación')
+      .toBeGreaterThan(0);
   }, 60000);
 });
 
@@ -135,7 +205,17 @@ describe('estructura de la campaña', () => {
       expect(r.pax, `nv${r.id}`).toBeGreaterThanOrEqual(3);
       expect(r.pax, `nv${r.id}`).toBeLessThanOrEqual(10);
     }
-  });
+  }, 60000);
+
+  it('el número de viajes crece con la campaña (más planificación, no más gente)', () => {
+    const mediaPrimeros = rows.slice(0, 10).reduce((a, r) => a + r.trips, 0) / 10;
+    const mediaUltimos = rows.slice(20).reduce((a, r) => a + r.trips, 0) / 10;
+    expect(mediaUltimos).toBeGreaterThan(mediaPrimeros);
+    for (const r of rows) {
+      expect(r.trips, `nv${r.id}`).toBeGreaterThanOrEqual(1);
+      expect(r.trips, `nv${r.id}`).toBeLessThanOrEqual(5);
+    }
+  }, 60000);
 
   it('cada monstruo aparece por primera vez EN el nivel que dice su ficha', () => {
     for (const m of MONSTERS) {
@@ -165,6 +245,15 @@ describe('estructura de la campaña', () => {
       expect(parejas, `nv${lvl.id}`).toBe(lvl.couples.length * 2);
       const enemistades = crew.reduce((a, m) => a + m.enemyIds.length, 0);
       expect(enemistades, `nv${lvl.id}`).toBe(lvl.enemies.length * 2);
+    }
+  });
+
+  it('los enemigos nunca son también pareja (sería una contradicción imposible)', () => {
+    for (const lvl of LEVELS) {
+      for (const [a, b] of lvl.enemies) {
+        const esPareja = lvl.couples.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+        expect(esPareja, `nv${lvl.id}: ${a}-${b} son pareja y enemigos`).toBe(false);
+      }
     }
   });
 });
@@ -204,11 +293,13 @@ describe('los títulos no mienten', () => {
     for (const t of titulos) expect(t.length).toBeGreaterThan(3);
   });
 
-  it('cada nivel que estrena una mecánica la tiene de verdad en la cabina', () => {
+  it('cada regla que declara un nivel existe de verdad en su crew', () => {
     for (const lvl of LEVELS) {
       const crew = buildCrew(lvl);
-      for (const r of crew.map((m) => m.rule)) {
-        expect(MONSTER_MAP[crew.find((m) => m.rule === r)!.monsterId].rule).toBe(r);
+      for (const r of rulesPresent(lvl)) {
+        if (r === 'couples' || r === 'enemies') continue;
+        const alguien = crew.some((m) => m.rule === r);
+        expect(alguien, `nv${lvl.id} declara la regla ${r} sin ningún huésped que la tenga`).toBe(true);
       }
     }
   }, 60000);
