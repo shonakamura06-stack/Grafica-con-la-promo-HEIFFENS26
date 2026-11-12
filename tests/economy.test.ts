@@ -140,6 +140,76 @@ describe('monedas por logros únicos', () => {
   });
 });
 
+describe('Modo Desafío separado de la campaña (Sprint 1)', () => {
+  // El Modo Desafío es opcional, se desbloquea en el nivel 10 y usa 3 vidas por
+  // partida. Nada de eso puede contaminar la campaña, que es gratis y sin vidas.
+  it('superar un desafío NO completa el nivel en la campaña ni da estrellas ni desbloquea', () => {
+    const s = defaultSave();
+    const badge = settleChallenge(s, 10);
+    expect(badge?.coins).toBe(COIN_REWARDS.CHALLENGE_BADGE);
+    expect(s.challengeCleared[10]).toBe(true);
+    // la campaña no se ha enterado
+    expect(s.completed[10]).toBeUndefined();
+    expect(s.stars[10] ?? 0).toBe(0);
+    expect(s.perfectLevels[10]).toBeUndefined();
+    expect(s.bestDistance[10]).toBeUndefined();
+    expect(s.progress.levelsDone).toBe(0);
+    expect(s.progress.threeStars).toBe(0);
+    expect(s.progress.challengeCleared).toBe(1);   // contador propio, no compartido
+    expect(s.unlockedLevel).toBe(1);               // no desbloquea el nivel 11
+  });
+
+  it('completar la campaña NO marca el desafío como superado', () => {
+    const s = defaultSave();
+    settleLevel(s, 10, 3, 17, 17);
+    expect(s.completed[10]).toBe(true);
+    expect(s.stars[10]).toBe(3);
+    expect(s.challengeCleared[10]).toBeUndefined();
+    expect(s.progress.challengeCleared).toBe(0);
+    expect(s.metrics.challengeAttempts).toBe(0);
+    // la insignia sigue intacta para cuando se juegue el desafío de verdad
+    expect(settleChallenge(s, 10)?.coins).toBe(COIN_REWARDS.CHALLENGE_BADGE);
+  });
+
+  it('las partidas de desafío NO alimentan las misiones de la campaña', () => {
+    const s = defaultSave();
+    settleLevel(s, 12, 3, 19, 19, { challenge: true, couplesDelivered: 2 });
+    expect(s.progress.couples ?? 0).toBe(0);
+    expect(s.progress.cleanLevels ?? 0).toBe(0);
+    // las mismas condiciones jugadas en campaña sí cuentan
+    settleLevel(s, 13, 3, 19, 19, { couplesDelivered: 2 });
+    expect(s.progress.couples).toBe(2);
+    expect(s.progress.cleanLevels).toBe(1);
+  });
+
+  it('las dos bolsas de monedas no se pisan y ninguna paga dos veces', () => {
+    const s = defaultSave();
+    const antes = s.coins;
+    settleLevel(s, 10, 2, 18, 17);
+    const campana = s.coins - antes;
+    expect(campana).toBe(COIN_REWARDS.FIRST_WIN + 2 * COIN_REWARDS.PER_STAR);
+    settleChallenge(s, 10);
+    expect(s.coins - antes).toBe(campana + COIN_REWARDS.CHALLENGE_BADGE);
+    const trasAmbos = s.coins;
+    expect(settleLevel(s, 10, 2, 18, 17).total).toBe(0);   // repetición de campaña: 0
+    expect(settleChallenge(s, 10)).toBeNull();              // repetición de desafío: null
+    expect(s.coins).toBe(trasAmbos);
+  });
+
+  it('la campaña no tiene vidas: 30 fracasos seguidos no bloquean ni cobran nada', () => {
+    const s = defaultSave();
+    const antes = s.coins;
+    for (let i = 0; i < 30; i++) settleLevel(s, 7, 1, 30, 11, { mistakes: 3 });
+    expect(s.metrics.levelsCompleted).toBe(30);
+    // solo se cobra la primera victoria y su estrella: reintentar es gratis
+    expect(s.coins - antes).toBe(COIN_REWARDS.FIRST_WIN + COIN_REWARDS.PER_STAR);
+    expect(settleLevel(s, 7, 1, 30, 11, { mistakes: 3 }).total).toBe(0);
+    // y no aparece ningún campo de vidas/corazones en el guardado
+    expect((s as unknown as Record<string, unknown>).lives).toBeUndefined();
+    expect((s as unknown as Record<string, unknown>).hearts).toBeUndefined();
+  });
+});
+
 describe('misiones: sin rachas ni castigo por ausencia', () => {
   it('no se pueden cobrar antes de completarlas', () => {
     const s = defaultSave();

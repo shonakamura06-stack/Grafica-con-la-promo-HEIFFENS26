@@ -137,10 +137,21 @@ una tarjeta visual. Después queda registrada en el álbum.
   y el diálogo indica tocar el botón de su piso. Nunca se ilumina el botón ni se dan conteos.
 - **Bajar es un movimiento**: el ascensor vacío NO vuelve solo a recepción; el jugador debe
   tocar PISO 0 y ese viaje suma al recorrido (y a las estrellas por eficiencia).
-- **Tiempos calibrados por simulación lenta**: cada timeLimit es el tiempo de jugar el nivel
-  siguiendo la ruta óptima a ritmo de niño lento (leer 8 s, tocar monstruo 4 s, tocar botón 3 s,
-  puertas 0.24 s, 0.38 s por piso, reaccionar 1.5 s, ver bajar 1.5 s, leer final 4 s),
-  redondeado a múltiplos de 5. Rangos nuevos: 40 s (nv 1) a 120 s (nv 30).
+- **Tiempos calibrados con presupuesto individual** (`src/systems/timing.ts`, Sprint 1): cada
+  `timeLimit` se calcula nivel a nivel sumando los costes de las interacciones que ese nivel
+  provoca de verdad — leer la tarjeta, tocar cada pasajero, pulsar el botón de piso, puertas,
+  viajes (0,42 s por piso), salidas, despertar a Nocti (3 s de duda + 3 s de toque) y el
+  tiempo de pensar (2,5 s por viaje) — más el aprendizaje de la primera vez que aparece una
+  regla (8 s al principio, 4 s a partir del nivel 15), el reencuadre tras una avería (3 s) y
+  **el margen para equivocarse dos veces** (2 errores normales o 1 error grave + 1 normal).
+  Nada de multiplicadores genéricos. Se redondea a múltiplos de 5 y se guarda en el campo
+  `timeLimit`, que `tests/timing.test.ts` obliga a mantener igual que el modelo.
+- **El cronómetro NO corre mientras se repara ni mientras se lee**: `startTimer()` ya se
+  detenía durante averías, diálogos de Rese y tutoriales. Con el Sprint 1 también se congela
+  en las tarjetas de desbloqueo y en los avisos de regla (campo `teaching`), y las averías se
+  aplazan hasta que la cabina no se mueve (hasta 8 intentos de 1,5 s).
+- **Equivocarse está presupuestado, no penado de muerte**: perder por tiempo debe ser una
+  excepción, no la norma. La exigencia real está en las estrellas (eficiencia), no en el reloj.
 - **Cabina lógica**: el suelo de la cabina marca tantos pads como capacidad (2/3/4) y el techo
   lleva un punto dorado por lugar; con capacidad 4 los monstruos viajan algo más apretados.
 - **Desbloqueos anunciados**: al empezar un nivel con novedad (ascensor más grande, parejas,
@@ -160,13 +171,23 @@ una tarjeta visual. Después queda registrada en el álbum.
 
 ## Personajes que complican (nuevos)
 
-- **Pegajín y Pegajón (dúo, nv 21+)**: suben SIEMPRE juntos (necesitan 2 lugares),
+- **Pegajín y Pegajón (dúo, nv 22+)**: suben SIEMPRE juntos con UN solo toque (cada uno
+  ocupa su lugar), pero cada uno baja en su propio piso.
   pero cada uno baja en su propio piso.
-- **Temblorín (miedoso, nv 24+)**: con él dentro, la cabina lleva como máximo 2 monstruos.
+- **Temblorín (miedoso, nv 25+)**: con él dentro, la cabina lleva como máximo 2 CRIATURAS
+  (los gemelos cuentan como 2).
 - Ambos entran en el solver óptimo, en las simulaciones de tiempo y en las pruebas.
 
 ## Récord y óptimo
 
+- **La ruta óptima es la ruta LIMPIA**: el solver (`systems/scoring.ts`) busca el mínimo de
+  movimientos entre las rutas que no separan parejas ni juntan enemigos, usando exactamente
+  las mismas reglas que el motor (`systems/rules.ts`). Desde el Sprint 1 tiene prohibido
+  aprovechar un vacío legal que existía: pasar por el piso de un enamorado cuya pareja no iba
+  dentro. El solver lo contaba como "se queda dentro gratis", pero el motor lo baja y cobra la
+  penalización, así que esa ruta NO era perfecta de verdad. Ahora ese viaje se descarta.
+  `tests/levels.test.ts` reproduce los 30 planes paso a paso con las reglas del motor y exige
+  que no aparezca ninguna penalización.
 - «¡PERFECTO!» (+50 monedas) = completar en la distancia óptima exacta sin penalizaciones.
 - «¡NUEVO RÉCORD PERSONAL!» (+150) = superar tu propia mejor distancia del nivel
   (guardada en el save). La pantalla de victoria muestra «Ruta óptima: X pasos» para apuntar.

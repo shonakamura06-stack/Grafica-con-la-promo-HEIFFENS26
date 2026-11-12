@@ -84,7 +84,7 @@ export const MONSTERS: MonsterDef[] = [
   {
     id: 'gemelos', name: 'Tini y Toni', color: 0x2dd4bf, colorDark: 0x0d9488,
     personality: 'Los gemelos inseparables del hotel. Siempre suben juntos al ascensor, sin excepción.',
-    rule: 'twins', ruleText: 'Los gemelos siempre suben JUNTOS al ascensor.', slots: 1, unlockLevel: 18, scale: 1, kind: 'family',
+    rule: 'twins', ruleText: 'Los gemelos siempre suben JUNTOS al ascensor.', slots: 1, unlockLevel: 19, scale: 1, kind: 'family',
   },
   {
     id: 'nocti', name: 'Nocti', color: 0x818cf8, colorDark: 0x4338ca,
@@ -125,17 +125,17 @@ export const MONSTERS: MonsterDef[] = [
   {
     id: 'pegajin', name: 'Pegajín', color: 0x4ade80, colorDark: 0x15803d,
     personality: 'Slime verde pegajoso, mejor amigo de Pegajón. Nunca sube al ascensor sin él.',
-    rule: 'duo', ruleText: 'Pegajín y Pegajón suben SIEMPRE juntos, pero cada uno baja en su piso.', slots: 1, unlockLevel: 21, scale: 1, kind: 'duo',
+    rule: 'duo', ruleText: 'Pegajín y Pegajón suben SIEMPRE juntos, pero cada uno baja en su piso.', slots: 1, unlockLevel: 22, scale: 1, kind: 'duo',
   },
   {
     id: 'pegajon', name: 'Pegajón', color: 0xa78bfa, colorDark: 0x6d28d9,
     personality: 'Slime morado, la otra mitad del dúo inseparable.',
-    rule: 'duo', ruleText: 'Pegajín y Pegajón suben SIEMPRE juntos, pero cada uno baja en su piso.', slots: 1, unlockLevel: 21, scale: 1, kind: 'duo',
+    rule: 'duo', ruleText: 'Pegajín y Pegajón suben SIEMPRE juntos, pero cada uno baja en su piso.', slots: 1, unlockLevel: 22, scale: 1, kind: 'duo',
   },
   {
     id: 'temblorin', name: 'Temblorín', color: 0x93c5fd, colorDark: 0x1d4ed8,
     personality: 'Monstruo miedoso que tiembla si la cabina se llena. Viaja con poca gente.',
-    rule: 'fear', ruleText: 'Temblorín solo viaja si hay 2 monstruos o menos dentro de la cabina.', slots: 1, unlockLevel: 24, scale: 1, kind: 'fear',
+    rule: 'fear', ruleText: 'Temblorín solo viaja si hay 2 monstruos o menos dentro de la cabina.', slots: 1, unlockLevel: 25, scale: 1, kind: 'fear',
   },
 ];
 

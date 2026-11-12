@@ -19,9 +19,10 @@
 
 import Phaser from 'phaser';
 import { getLevel, LEVELS, LevelDef, TOTAL_LEVELS } from '../data/levels';
-import { MONSTER_MAP, MonsterDef, TWIN_GROUP, Mood, floorColor } from '../data/monsters';
+import { MONSTER_MAP, MonsterDef, Mood, floorColor } from '../data/monsters';
 import { loadSave, writeSave, SaveData } from '../systems/save';
 import { computeOptimal, starsFor, moodForMistakes, MAX_MISTAKES } from '../systems/scoring';
+import { buildCrew, canBoard, canExit, CrewMember } from '../systems/rules';
 import { queueLine, arrivalLine, pickLine, SEPARATED_LINES, ENEMY_LINES, RECEPTIONIST_LINES } from '../data/dialogues';
 import { makeButton, makePanel, makeText, makeStars, makeWoodSign, COLORS } from '../systems/ui';
 import { audio, vibrate } from '../systems/audio';
@@ -122,6 +123,8 @@ export default class GameScene extends Phaser.Scene {
   private enemiesOf = new Map<number, number[]>(); // pasajero -> enemigos
   private breakdownDone = false;   // ya ocurrió la avería en este nivel
   private repairing = false;       // minijuego de reparación abierto
+  private teaching = false;        // hay una tarjeta/ficha en pantalla: el reloj espera
+  private crew: CrewMember[] = []; // unidades del nivel (gemelos fusionados), compartido con el solver
   private speechTimer?: Phaser.Time.TimerEvent;
   private receptionist!: Phaser.GameObjects.Container;
   private receptionistText!: Phaser.GameObjects.Text;
@@ -194,6 +197,8 @@ export default class GameScene extends Phaser.Scene {
     this.enemiesOf.clear();
     this.breakdownDone = false;
     this.repairing = false;
+    this.teaching = false;
+    this.crew = [];
     this.optimal = computeOptimal(this.level).optimal;
   }
 
@@ -220,6 +225,16 @@ export default class GameScene extends Phaser.Scene {
   }
   private onboard(): Passenger[] {
     return this.passengers.filter((p) => p.state === 'onboard');
+  }
+  /** Ids del crew dentro de la cabina, INCLUIDOS los que están animando la subida. */
+  private cabIds(): number[] {
+    return this.passengers
+      .filter((p) => p.state === 'onboard' || p.state === 'boarding')
+      .map((p) => p.id);
+  }
+  /** Ids del crew que siguen esperando en recepción (ni a bordo ni entregados). */
+  private queueIds(): number[] {
+    return this.passengers.filter((p) => p.state === 'queue').map((p) => p.id);
   }
   private queueScale(p: Passenger): number {
     return 0.5 * p.def.scale;
@@ -538,7 +553,7 @@ export default class GameScene extends Phaser.Scene {
     this.timerEvent = this.time.addEvent({
       delay: 1000, loop: true,
       callback: () => {
-        if (this.won || this.paused || this.repairing || this.reseActive) return;
+        if (this.won || this.paused || this.repairing || this.reseActive || this.teaching) return;
         this.timeLeft--;
         this.timeText.setText(`${Math.max(0, this.timeLeft)}s`);
         this.timeText.setColor(this.timeLeft <= 10 ? '#ef4444' : '#6b4423');
@@ -795,42 +810,19 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Pasajeros ────────────────────────────────────────────────────────────
   private createPassengers(): void {
-    // Los gemelos se fusionan en un solo pasajero-grupo (suben juntos).
-    // Se guarda el índice original de cada grupo para mapear parejas/enemigos.
-    const groups: Array<{ monsterId: string; dest: number; slots: number; orig: number[] }> = [];
-    const twinDest = this.level.passengers.filter((p) => p.m === TWIN_GROUP);
-    this.level.passengers.forEach((p, idx) => {
-      if (p.m === TWIN_GROUP) return;
-      const def = MONSTER_MAP[p.m];
-      groups.push({ monsterId: p.m, dest: p.d, slots: def.slots, orig: [idx] });
-    });
-    if (twinDest.length > 0) {
-      const def = MONSTER_MAP[TWIN_GROUP];
-      const orig = this.level.passengers.map((p, i) => (p.m === TWIN_GROUP ? i : -1)).filter((i) => i >= 0);
-      groups.push({ monsterId: TWIN_GROUP, dest: twinDest[0].d, slots: def.slots * twinDest.length, orig });
+    // El crew viene de systems/rules.ts: la MISMA lista de unidades que usa el
+    // solver para calcular la ruta óptima (los gemelos son una sola unidad que
+    // sube y baja junta). Antes el motor la reconstruía por su cuenta y ya se
+    // había separado del solver en tres reglas.
+    this.crew = buildCrew(this.level);
+    this.coupleOf.clear();
+    this.enemiesOf.clear();
+    for (const m of this.crew) {
+      if (m.coupleId >= 0) this.coupleOf.set(m.id, m.coupleId);
+      if (m.enemyIds.length > 0) this.enemiesOf.set(m.id, m.enemyIds.slice());
     }
 
-    // Mapear índices originales -> id de pasajero (para parejas y enemigos).
-    const origToId = new Map<number, number>();
-    groups.forEach((grp, gi) => grp.orig.forEach((oi) => origToId.set(oi, gi)));
-    for (const [a, b] of this.level.couples) {
-      const ia = origToId.get(a), ib = origToId.get(b);
-      if (ia !== undefined && ib !== undefined) {
-        this.coupleOf.set(ia, ib);
-        this.coupleOf.set(ib, ia);
-      }
-    }
-    for (const [a, b] of this.level.enemies) {
-      const ia = origToId.get(a), ib = origToId.get(b);
-      if (ia !== undefined && ib !== undefined) {
-        if (!this.enemiesOf.has(ia)) this.enemiesOf.set(ia, []);
-        if (!this.enemiesOf.has(ib)) this.enemiesOf.set(ib, []);
-        this.enemiesOf.get(ia)!.push(ib);
-        this.enemiesOf.get(ib)!.push(ia);
-      }
-    }
-
-    groups.forEach((grp, i) => {
+    this.crew.forEach((grp, i) => {
       const def = MONSTER_MAP[grp.monsterId];
       const container = this.add.container(0, 0).setDepth(10);
       const shadow = this.add.image(0, 28, 'shadow').setScale(0.9);
@@ -937,7 +929,7 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Interacción ──────────────────────────────────────────────────────────
   private onPassengerTap(p: Passenger): void {
-    if (this.won || this.paused || this.moving || this.reseActive) return;
+    if (this.won || this.paused || this.moving || this.reseActive || this.teaching) return;
     audio.ensure();
 
     if (p.state === 'queue') {
@@ -947,43 +939,26 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
       if (!this.doorsOpen) return;
-      const onboard = this.onboard();
-      if (p.def.rule === 'shy' && onboard.length > 0) {
+      // Todas las reglas DURAS las decide systems/rules.ts, el mismo módulo que
+      // usa el solver: tímido, miedoso, dúo, gemelos, gigante, maletas y capacidad.
+      const verdict = canBoard(this.crew, p.id, this.cabIds(), this.level.capacity, 'real', this.queueIds());
+      if (!verdict.ok) {
         audio.error();
-        this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
-        if (!this.shyExplained) { this.shyExplained = true; this.reseSay('forg_shy'); }
-        return;
-      }
-      if (onboard.some((o) => o.def.rule === 'shy')) {
-        audio.error();
-        this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
-        if (!this.shyExplained) { this.shyExplained = true; this.reseSay('forg_shy'); }
-        return;
-      }
-      // Miedoso: viaja con 2 o menos en la cabina (se bloquea y Rese explica la 1ª vez).
-      const inCab = this.passengers.filter((q) => q.state === 'onboard' || q.state === 'boarding');
-      const duoFriend = p.def.rule === 'duo'
-        ? this.passengers.find((q) => q !== p && q.def.rule === 'duo' && q.state === 'queue')
-        : undefined;
-      const groupSize = 1 + (duoFriend ? 1 : 0);
-      const fearInvolved = p.def.rule === 'fear' || inCab.some((o) => o.def.rule === 'fear');
-      if (fearInvolved && inCab.length + groupSize > 2) {
-        audio.error();
-        this.showBubble('Temblorín se asusta: máximo 2 en la cabina', CAB_X, this.cab.y - 90);
-        if (!this.fearExplained) { this.fearExplained = true; this.reseSay('forg_fear'); }
-        return;
-      }
-      // Dúo pegajoso: suben juntos o no suben.
-      if (p.def.rule === 'duo' && duoFriend) {
-        if (this.usedSlots() + p.slots + duoFriend.slots > this.level.capacity) {
-          audio.error();
+        if (verdict.reason === 'shyInside' || verdict.reason === 'shyWaiting') {
+          this.showBubble('Sombrín quiere viajar solo', CAB_X, this.cab.y - 90);
+          if (!this.shyExplained) { this.shyExplained = true; this.reseSay('forg_shy'); }
+        } else if (verdict.reason === 'fear') {
+          this.showBubble('Temblorín se asusta: máximo 2 en la cabina', CAB_X, this.cab.y - 90);
+          if (!this.fearExplained) { this.fearExplained = true; this.reseSay('forg_fear'); }
+        } else if (verdict.reason === 'partnerSpace') {
           this.showBubble('¡El dúo necesita 2 lugares libres!', CAB_X, this.cab.y - 90);
-          return;
+        } else {
+          this.showBubble('¡Ascensor lleno!', CAB_X, this.cab.y - 90);
         }
+        return;
       }
-      // Enemigos: PUEDEN subir juntos, pero resta 1 estrella (para aprender).
-      const myEnemies = this.enemiesOf.get(p.id) ?? [];
-      if (myEnemies.some((e) => onboard.some((o) => o.id === e))) {
+      // Enemigos: PUEDEN subir juntos (regla BLANDA), pero resta 1 estrella.
+      if (verdict.penalties.includes('enemyRide')) {
         const forgiveNow = !this.forgiven;
         if (forgiveNow) this.forgiven = true;
         else this.ruleBreaks++;
@@ -996,13 +971,13 @@ export default class GameScene extends Phaser.Scene {
         // No se bloquea: el jugador aprende con la consecuencia.
         if (forgiveNow) this.reseSay('forg_enemy');
       }
-      if (this.usedSlots() + p.slots > this.level.capacity) {
-        audio.error();
-        this.showBubble('¡Ascensor lleno!', CAB_X, this.cab.y - 90);
-        return;
-      }
       this.board(p);
-      if (duoFriend) this.time.delayedCall(120, () => this.board(duoFriend));
+      // El mejor amigo de un dúo sube solo, como siempre (lo dice el veredicto).
+      const friendId = verdict.board.find((id) => id !== p.id);
+      if (friendId !== undefined) {
+        const friend = this.passengers[friendId];
+        this.time.delayedCall(120, () => this.board(friend));
+      }
       if (this.guidedStage === 0 && this.guidedPax === p) {
         this.guidedStage = 1;
         this.guidedArrow?.destroy();
@@ -1063,7 +1038,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private onFloorButton(f: number): void {
-    if (this.won || this.paused || this.moving || this.reseActive) return;
+    if (this.won || this.paused || this.moving || this.reseActive || this.teaching) return;
     audio.ensure();
     if (f === this.elevatorFloor) return;
     const onboard = this.onboard();
@@ -1123,21 +1098,21 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const arriving = this.onboard().filter((p) => p.dest === f);
-    const sleepers = arriving.filter((p) => p.def.rule === 'sleepwalker');
+    const inCab = this.cabIds();
     // Parejas: si solo subió uno, se separa (pierde 1 estrella) y sale triste.
     const separated: Passenger[] = [];
-    const exiters = arriving.filter((p) => {
-      if (p.def.rule === 'sleepwalker') return false;
-      const partnerId = this.coupleOf.get(p.id);
-      if (partnerId !== undefined) {
-        const partner = this.passengers.find((q) => q.id === partnerId);
-        if (partner && partner.state !== 'onboard') {
-          separated.push(p);
-          return true; // sale, pero triste
-        }
+    const sleepers: Passenger[] = [];
+    const exiters: Passenger[] = [];
+    for (const p of arriving) {
+      // awake=false: al llegar, un sonámbulo SIEMPRE se duerme y hay que tocarlo.
+      const v = canExit(this.crew, p.id, f, inCab, false, 'real');
+      if (!v.exits) {
+        if (v.reason === 'asleep') sleepers.push(p);
+        continue;
       }
-      return true;
-    });
+      if (v.penalties.includes('coupleSeparated')) separated.push(p);
+      exiters.push(p);
+    }
     // Parejas entregadas JUNTAS (se cuenta cada pareja una sola vez, para misiones).
     const exitIds = new Set(exiters.map((e) => e.id));
     for (const p of exiters) {
@@ -1290,7 +1265,9 @@ export default class GameScene extends Phaser.Scene {
     this.showBubble('¡Despierto!', CAB_X, this.cab.y - 90, 1200);
     this.tweens.add({ targets: p.image, scale: this.cabScale(p) * 1.2, duration: 150, yoyo: true });
     this.time.delayedCall(350, () => {
-      if (p.state === 'onboard' && p.dest === this.elevatorFloor) this.exitPassenger(p);
+      if (p.state !== 'onboard') return;
+      const v = canExit(this.crew, p.id, this.elevatorFloor, this.cabIds(), true, 'real');
+      if (v.exits) this.exitPassenger(p);
     });
   }
 
@@ -1503,6 +1480,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private showRuleToast(p: Passenger): void {
+    this.teaching = true;
     const c = this.add.container(0, 0).setDepth(80);
     const dim = this.add.rectangle(0, 0, W, H, 0x000000, 0.4).setOrigin(0).setInteractive();
     c.add(dim);
@@ -1516,7 +1494,7 @@ export default class GameScene extends Phaser.Scene {
     }).setOrigin(0.5, 0);
     c.add(t);
     const btn = makeButton(this, W / 2, H / 2 + 120, 200, 54, '¡ENTENDIDO!', {
-      fontSize: 20, onClick: () => c.destroy(),
+      fontSize: 20, onClick: () => { this.teaching = false; c.destroy(); },
     });
     c.add(btn);
   }
@@ -1559,10 +1537,17 @@ export default class GameScene extends Phaser.Scene {
   private maybeBreakdown(): void {
     if (this.level.breakdownChance <= 0) return;
     // La avería ocurre tras el primer viaje (no al inicio).
-    this.time.delayedCall(8000, () => {
-      if (this.won || this.paused || this.breakdownDone) return;
+    const intent = (tries: number): void => {
+      if (this.won || this.breakdownDone || tries <= 0) return;
+      // Si el jugador está leyendo algo o viajando, la avería espera: no se pierde
+      // ni se solapa con un diálogo (y el reloj ya está detenido en esos casos).
+      if (this.paused || this.reseActive || this.teaching || this.moving) {
+        this.time.delayedCall(1500, () => intent(tries - 1));
+        return;
+      }
       if (Math.random() < this.level.breakdownChance) this.triggerBreakdown();
-    });
+    };
+    this.time.delayedCall(8000, () => intent(8));
   }
 
   private triggerBreakdown(): void {
@@ -1697,6 +1682,7 @@ export default class GameScene extends Phaser.Scene {
   private showUnlocks(done: () => void): void {
     const prev = LEVELS.filter((l) => l.id < this.level.id);
     const cards: Array<{ draw: string; title: string; text: string }> = [];
+    // Leer una tarjeta no puede costar tiempo: el reloj se detiene hasta que se cierra.
     const maxCapPrev = prev.reduce((m, l) => Math.max(m, l.capacity), 0);
     if (this.level.id > 1 && this.level.capacity > maxCapPrev) {
       cards.push({ draw: 'cab', title: '¡ASCENSOR MÁS GRANDE!', text: `Ahora caben ${this.level.capacity} monstruos a la vez. Mira los lugares marcados en el suelo de la cabina y los puntos dorados del techo.` });
@@ -1726,6 +1712,7 @@ export default class GameScene extends Phaser.Scene {
       cards.push({ draw: 'gear', title: '¡CUIDADO, AVERÍAS!', text: 'El ascensor viejito puede averiarse. Gira los engranajes para repararlo: mientras, el tiempo se pausa.' });
     }
     if (cards.length === 0) { done(); return; }
+    this.teaching = true;
     let i = 0;
     const showCard = (): void => {
       const card = cards[i];
@@ -1810,7 +1797,7 @@ export default class GameScene extends Phaser.Scene {
             c.destroy();
             i += 1;
             if (i < cards.length) showCard();
-            else done();
+            else { this.teaching = false; done(); }
           },
         });
       });
@@ -2080,7 +2067,15 @@ export default class GameScene extends Phaser.Scene {
     else if (perfect) banner = '¡RUTA ÓPTIMA EXACTA!';
     else if (reward.firstWin) banner = '¡NIVEL SUPERADO POR PRIMERA VEZ!';
     if (banner) c.add(makeText(this, W / 2, H / 2 + 34, banner, 15, bannerColor, false));
-    c.add(makeText(this, W / 2, H / 2 + 56, `Ruta óptima: ${this.optimal} pasos`, 13, '#8a6fd0', false));
+    // "Ruta limpia" = el óptimo del solver sin separar parejas ni juntar enemigos
+    // (systems/rules.ts, policy 'clean'). Puede pasar que el jugador haga MENOS
+    // pasos que esa ruta: solo se consigue rompiendo una relación, y arriba ya se
+    // le cobra la estrella. Se dice explícitamente para que no parezca un fallo
+    // que sus pasos sean menos que el "óptimo".
+    const rutaTxt = effDistance < this.optimal
+      ? `Ruta limpia: ${this.optimal} pasos · hiciste ${effDistance} rompiendo una regla`
+      : `Ruta limpia óptima: ${this.optimal} pasos`;
+    c.add(makeText(this, W / 2, H / 2 + 56, rutaTxt, 13, '#8a6fd0', false));
     // Desglose honesto de monedas: qué logro pagó y cuánto
     const detail = reward.lines.length > 0
       ? reward.lines.map((l) => `${l.label} +${l.coins}`).join('   ·   ')

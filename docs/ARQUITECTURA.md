@@ -19,12 +19,24 @@ y funciona sin conexión tras la primera carga (PWA).
 src/
   main.ts                  Punto de entrada: configuración de Phaser y PWA
   data/
-    monsters.ts            Definición de los 12 monstruos (reglas, colores…)
+    monsters.ts            Definición de los 20 monstruos (reglas, colores…)
     levels.ts              Los 30 niveles como datos (sin lógica)
+    shop.ts / missions.ts / dialogues.ts / reseVoice.ts
+                           Contenido: tienda cosmética, misiones, textos de Rese
   systems/
+    rules.ts               ★ Única fuente de verdad de las reglas sociales y de
+                             cabina: buildCrew, canBoard, canExit, rulesPresent,
+                             difficultyIndex. La usan EL MOTOR y EL SOLVER.
+    timing.ts              ★ Presupuesto de tiempo por nivel (PACING): cuántos
+                             segundos cuesta jugar un nivel y cuántos se dan de
+                             margen para equivocarse dos veces.
+    scoring.ts             Recorrido óptimo (Dijkstra sobre rules.ts) y estrellas
+    economy.ts             Economía V3: monedas, recompensas, packs de demo
+    cosmetics.ts           Cosméticos comprables y aplicación en escena
+    balance.ts             Simulador de perfiles de jugador para el informe
+    parental.ts            Puerta parental para las compras de la demo
     save.ts                Guardado versionado en localStorage + personalización
     audio.ts               Motor de sonido WebAudio (efectos + música original)
-    scoring.ts             Recorrido óptimo (Dijkstra) y cálculo de estrellas
     ui.ts                  Botones, paneles y textos reutilizables
   scenes/
     BootScene.ts           Genera todas las texturas (monstruos, iconos…)
@@ -32,12 +44,18 @@ src/
     LevelSelectScene.ts    Mapa de 30 niveles con estrellas y bloqueos
     GameScene.ts           Escena de juego: ascensor, pasajeros, panel, HUD
     AlbumScene.ts          Galería coleccionable de monstruos
-    CustomizeScene.ts      Personalización del hotel (monedas)
+    ShopScene.ts           Tienda cosmética (sin energía ni vidas)
+    MissionsScene.ts       Misiones y logros
+    DataScene.ts           Métricas en el dispositivo
     SettingsScene.ts       Sonido, música, vibración, reinicio de progreso
 tests/
-  scoring.test.ts          Óptimo, estrellas y monedas
-  levels.test.ts           Integridad de niveles y completabilidad
-  save.test.ts             Persistencia y fusión de guardado
+  rules.test.ts            ★ Reglas sociales y de cabina, una por una
+  timing.test.ts           ★ Presupuesto de los 30 cronómetros
+  progression.test.ts      ★ Forma de la curva de dificultad
+  scoring.test.ts          Óptimo, estrellas y monedas (+ fuerza bruta)
+  levels.test.ts           Integridad de niveles y reproducibilidad del plan
+  balance.test.ts          Simulación de perfiles de jugador
+  economy.test.ts / save.test.ts
 public/
   manifest.webmanifest     Manifiesto PWA (instalable)
   sw.js                    Service Worker (cache-first, offline)

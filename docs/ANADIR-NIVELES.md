@@ -13,6 +13,10 @@ Cada nivel es una entrada en el array `LEVELS`:
   title: 'Mi nivel',         // nombre corto que se muestra en el HUD
   floors: 6,                 // pisos disponibles (1..floors); 0 = recepción
   capacity: 4,               // espacios del ascensor
+  timeLimit: 0,              // ← NO se escribe a mano: ver «El cronómetro» abajo
+  breakdownChance: 0,        // 0..1 (las averías empiezan en el nivel 20)
+  couples: [],               // parejas de ÍNDICES que deben viajar juntas
+  enemies: [],               // parejas de ÍNDICES que no deben viajar juntas
   passengers: [
     P('bubu', 2),             // monstruo 'bubu' quiere ir al piso 2
     P('chispa', 5),
@@ -23,8 +27,12 @@ Cada nivel es una entrada en el array `LEVELS`:
 ```
 
 `P(monstruo, piso)` es un helper local. Los ids de monstruo están en
-`src/data/monsters.ts` (`bubu`, `chispa`, `moco`, `nube`, `draculin`,
-`rufi`, `glup`, `sombrin`, `gordito`, `gemelos`, `nocti`, `fantasmita`).
+`src/data/monsters.ts` (`bubu`, `chispa`, `moco`, `nube`, `draculin`, `rufi`,
+`glup`, `sombrin`, `gordito`, `gemelos`, `nocti`, `fantasmita`, `turista`, `vip`,
+`maletero`, `enamorado`, `grunon`, `pegajin`, `pegajon`, `temblorin`). Un monstruo
+solo puede aparecer **a partir del nivel de su ficha** (`unlockLevel`) y debe
+aparecer **exactamente en ese nivel** la primera vez: `tests/progression.test.ts`
+lo comprueba, igual que comprueba que el título no prometa un monstruo que no está.
 
 ## Reglas de diseño
 
@@ -37,6 +45,36 @@ Cada nivel es una entrada en el array `LEVELS`:
    pero comprueba que los gemelos quepan juntos (2 espacios).
 7. El recorrido óptimo y las estrellas se calculan solos (Dijkstra).
 
+## El cronómetro no se escribe a mano
+
+`timeLimit` es el resultado de `recommendedTimeLimit(nivel)` de
+`src/systems/timing.ts`: un presupuesto individual que suma leer la tarjeta,
+tocar a cada pasajero, pulsar el botón, puertas, viajes, salidas, despertar a
+Nocti, pensar entre viajes, aprender una regla nueva y reencuadrarse tras una
+avería, **más el margen para equivocarse dos veces**. Para obtenerlo:
+
+```bash
+npx vitest run tests/timing.test.ts   # falla y dice qué valor toca poner
+```
+
+`tests/timing.test.ts` exige que el campo coincida EXACTAMENTE con el modelo y
+que ningún nivel baje de 2 errores tolerables. Si cambias el roster o los
+destinos de un nivel, su `timeLimit` cambia solo: no lo "redondees a ojo".
+
+## La curva no puede romperse
+
+`tests/progression.test.ts` fija la forma de la campaña:
+
+1. Los movimientos óptimos **nunca bajan** de un nivel al siguiente.
+2. Las mesetas del óptimo duran como mucho 8 niveles y el índice de dificultad
+   (`difficultyIndex` de `systems/rules.ts`) del último supera al del primero:
+   la complejidad se añade combinando reglas, no apilando pasajeros.
+3. El índice de dificultad no cae más de 6 puntos entre niveles seguidos y la
+   tendencia a 6 niveles siempre sube. El nivel 30 es el más difícil.
+4. Cada mecánica se estrena una sola vez y en el nivel que dice su ficha.
+
+Si un nivel nuevo rompe alguna de estas reglas, el test falla diciendo cuál.
+
 ## Verificación automática
 
 Tras añadir niveles, ejecuta:
@@ -45,10 +83,11 @@ Tras añadir niveles, ejecuta:
 npm test
 ```
 
-La suite `tests/levels.test.ts` valida destinos, monstruos, parejas de
-gemelos, capacidad mínima y que **todos los niveles son completables**
-con óptimo finito. Si un nivel es inválido, el test falla con el número
-de nivel implicado.
+`tests/levels.test.ts` valida destinos, monstruos, parejas de gemelos, capacidad
+mínima, que **todos los niveles son completables** con óptimo finito y —esto es lo
+importante— **reproduce los 30 planes óptimos paso a paso con las reglas reales del
+motor** (`canBoard`/`canExit`), igual que hace `GameScene`: así no puede colarse un
+nivel cuyo "óptimo" el juego no permita ejecutar sin penalización.
 
 ## Desbloqueo y álbum
 

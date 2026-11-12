@@ -2,6 +2,10 @@
 
 Fecha: 2026-11-10 · Versión del juego: 1.1.0 (renovación visual kawaii pastel + drama de piso equivocado)
 
+> **Recuento vigente: 186 pruebas en 8 archivos, todas en verde** (`npm test`).
+> Las secciones siguientes son históricas y se conservan tal cual; lo que está en
+> vigor es la última actualización, «Sprint 1: jugabilidad justa».
+
 ## Pruebas automatizadas (Vitest) — ✅ 31/31 superadas
 
 Ejecutar con `npm test`. Tres suites:
@@ -193,3 +197,99 @@ PWA, Service Worker e iconos 192/512.
 - Balance resultante (simulación real, no suposiciones): casual 1 130 🪙 (8/12 objetos),
   habitual 1 650 (10/12), 3 estrellas 2 455 (12/12), repetidor 445 con 64 repeticiones (4/12),
   sesión corta 750 (6/12). Catálogo completo: 2 250 🪙 con paquete / 2 450 por separado.
+
+---
+
+## Actualización: Sprint 1 — jugabilidad justa (cronómetros, curva, reglas unificadas)
+
+Fecha: 2026-11-12 · **186 pruebas en 8 archivos, todas en verde** · `npm run build` correcto ·
+`npx tsc --noEmit` sin errores. Punto de recuperación anterior al sprint: tag
+`recovery/797b7fb-pre-sprint1`.
+
+### El fallo que motivó el sprint
+
+Con los cronómetros antiguos, **ninguno de los 30 niveles toleraba un solo error**: la holgura
+entre el `timeLimit` y una partida limpia y lenta iba de 0,1 s (nv 2, 16 y 20) a 4,6 s, y
+equivocarse de piso costaba ~7,5 s. Es decir: el primer fallo condenaba la partida, aunque
+`MAX_MISTAKES = 3` prometiera tres. Ahora todos los niveles toleran **2 errores normales**
+(holgura mínima 15,6 s, máxima 20,1 s) y la exigencia de eficiencia se ha trasladado a las
+estrellas, que es donde no frustra a nadie.
+
+### Pruebas nuevas (79) y pruebas arregladas
+
+- `tests/rules.test.ts` (**40**, nuevo): cada regla social probada una vez y para los dos lados
+  (motor y solver): tímido —incluidos los que ya están subiendo—, gigante, maletero, fantasma,
+  miedoso (los gemelos cuentan 2 criaturas), dúo, gemelos, sonámbulo, parejas, enemigos (blanda
+  en juego real, dura en ruta limpia), `buildCrew` con remapeo de índices, `rulesPresent`,
+  `newRulesIn` y `difficultyIndex`. Incluye 3 meta-pruebas de cobertura: si se añade una regla
+  nueva sin probarla, o si una regla no aparece en ningún nivel, falla.
+- `tests/timing.test.ts` (**20**, nuevo): coste de un error, que los 30 cronómetros aguanten
+  ≥ 2 errores, que coincidan EXACTAMENTE con `recommendedTimeLimit` (nada de números puestos a
+  ojo), múltiplos de 5, holgura ≥ 12 s, que no regalen minutos (< 2,2× la partida limpia),
+  toques por unidad del crew (los dúos, uno), presupuesto real de despertar a Nocti, que la
+  avería NO cobre la reparación (el reloj está pausado), que no se presupueste leer tutoriales
+  (también pausados) y la descomposición exacta del presupuesto.
+- `tests/progression.test.ts` (**18**, nuevo): la forma de la curva. Los movimientos óptimos no
+  bajan nunca entre niveles seguidos (antes: 25 → 17 → 11 y 19 → 11), las mesetas duran ≤ 8
+  niveles y se compensan con dificultad, el índice de dificultad no cae más de 6 puntos y su
+  tendencia a 6 niveles siempre sube, el nv 30 es el más difícil, la cabina crece una sola vez
+  (nv 14), las averías empiezan en el nv 20, cada monstruo aparece por primera vez exactamente
+  en el nivel de su ficha, ninguna relación apunta a los gemelos y **los títulos no mienten**
+  (el nv 18 se llamaba «Gemelos inseparables» sin gemelos: ahora es «Amor y gruñidos»).
+- `tests/levels.test.ts` (16 → **20**, reescrito en parte): se eliminaron las dos pruebas
+  decorativas —el `it('las vidas solo aparecen desde el nivel 15')` con el bucle vacío, que
+  pasaba sin comprobar nada, y el `simulate()` interno con `if (rule === 'shy' || true)`, que
+  hacía que la validación de reglas no filtrara nada—. En su lugar hay una **réplica del plan
+  óptimo paso a paso con las reglas reales del motor** (`canBoard`/`canExit`, con foto de la
+  cabina como hace `GameScene.arrive()`), que exige que los 30 planes entreguen a todos los
+  pasajeros sin violar ninguna regla dura y **sin ninguna penalización blanda**, que la ruta
+  limpia nunca sea más larga que la que rompe relaciones, y que cuando juntar enemigos ahorre
+  pasos ese atajo venga con su penalización.
+- `tests/economy.test.ts` (43 → **48**): separación real entre Modo Desafío y campaña (un
+  desafío superado no completa el nivel, no da estrellas, no desbloquea y no alimenta misiones;
+  completar la campaña no consume la insignia; 30 fracasos seguidos no bloquean ni cobran).
+
+### Divergencia solver ↔ motor encontrada y corregida
+
+`computeOptimal` trataba el `coupleAlone` de la ruta limpia como «se queda dentro gratis»:
+podía devolver un plan que pasaba por el piso de un enamorado sin su pareja, contando que
+seguiría a bordo para entregarlo más tarde. El motor juega en política real y **lo baja igual**,
+cobrando `coupleSeparated` (una estrella menos). O sea: el juego podía anunciar una ruta
+perfecta que el propio juego castiga. Ahora ese viaje se prohíbe en la búsqueda
+(`src/systems/scoring.ts`) y la réplica de `tests/levels.test.ts` lo verifica en los 30 niveles.
+Ningún óptimo de la campaña antigua cambió con el arreglo (el bug no llegó a falsear números),
+pero sí el plan del nv 28 rediseñado.
+
+### Retirado
+
+- `slowPlaySeconds` y la tabla `SLOW` de `scoring.ts`: su modelo (leer 8 s, tocar 4 s, botón
+  3 s, celebrar 4 s) era genérico, no presupuestaba despertar a Nocti ni las averías, y
+  producía los cronómetros imposibles de arriba. Lo sustituye `src/systems/timing.ts`.
+- El `simulate()` con reglas falsas de `tests/levels.test.ts`.
+- `avgMinutesPerLevel` ya no usa el `timeLimit` (que ahora incluye el margen de error) sino el
+  tiempo real de partida: si no, todo el informe de equilibrio saldría inflado. Las monedas no
+  dependen de ese número, así que la Economía V3 queda intacta.
+
+### Nuevos módulos
+
+- `src/systems/rules.ts`: única fuente de verdad de reglas (`buildCrew`, `canBoard`, `canExit`,
+  `slotsOf`, `creaturesOf`, `rulesPresent`, `newRulesIn`, `difficultyIndex`). La consumen
+  `GameScene.ts` (20 puntos migrados), `scoring.ts` y las pruebas.
+- `src/systems/timing.ts`: `PACING` con el coste de cada interacción real, `levelTiming()` con
+  el desglose completo del presupuesto, `mistakeCostSeconds()`, `recommendedTimeLimit()`.
+
+### Notas honestas
+
+- **No se ha abierto el juego en un navegador**: no hay navegador binario en este entorno. Todo
+  lo anterior son pruebas automáticas, compilación y simulación numérica de los 30 niveles. La
+  sensación real al jugar (ritmo, si 2 errores bastan, si la avería descoloca más de 3 s) sigue
+  sin verificarse y corresponde al Sprint 5 con niños.
+- El presupuesto de avería cobra solo el reencuadre (3 s × probabilidad), porque la reparación
+  pausa el reloj. Es una hipótesis razonable, no una medición con jugadores.
+- Para que el nv 17 llegue a 21 movimientos sus destinos se concentran en 3 pisos: con 4 pisos
+  distintos el máximo alcanzable es 19 (repartir huéspedes permite entregar más por viaje). Se
+  ha priorizado la curva sin escalones; la variedad de destinos queda pendiente.
+- `GameScene.ts` sigue teniendo ~2 240 líneas. Se ha migrado a las reglas compartidas sin
+  partir el archivo, como se acordó: la división progresiva viene después de arreglar el juego.
+- Cobertura sigue siendo nula en las 8 escenas no-Game y en `cosmetics.ts`, `parental.ts`,
+  `audio.ts`, `ui.ts` y `dialogues.ts` (necesitan navegador o un entorno DOM).
